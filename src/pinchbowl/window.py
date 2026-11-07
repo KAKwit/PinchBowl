@@ -55,7 +55,6 @@ class PinchBowlWindow(Adw.ApplicationWindow):
         self._pane_save = None
         self._layout_sync = None
         self._ready = False
-        self._layout_tries = 0
         self._selecting = False
         self._cook_active = False
         self._cook_was_maximized = False
@@ -210,6 +209,11 @@ class PinchBowlWindow(Adw.ApplicationWindow):
         self.outer_paned.set_hexpand(True)
         self.outer_paned.set_vexpand(True)
 
+        # Apply remembered divider positions before the first map so the
+        # window does not open at the children's natural widths and then jump.
+        self.outer_paned.set_position(settings.nav_width)
+        self.list_paned.set_position(settings.list_width)
+
         self.outer_paned.connect("notify::position", self._on_pane_moved)
         self.list_paned.connect("notify::position", self._on_pane_moved)
 
@@ -248,7 +252,9 @@ class PinchBowlWindow(Adw.ApplicationWindow):
         )
         self._mela_watch.restart()
         GLib.idle_add(self._mela_watch_check_later)
-        GLib.idle_add(self._apply_layout_later)
+        # Reaffirm positions once the window has a real allocation (maximize /
+        # compositor sizing). No-op visually if they already match.
+        self.connect("map", self._on_first_map)
 
     def _mela_watch_check_later(self) -> bool:
         if self._closed or self._mela_watch is None:
@@ -642,6 +648,8 @@ class PinchBowlWindow(Adw.ApplicationWindow):
             developers=["KAKwit"],
             copyright="© 2026 KAKwit",
             license_type=Gtk.License.GPL_3_0,
+            website="https://github.com/KAKwit/PinchBowl",
+            issue_url="https://github.com/KAKwit/PinchBowl/issues",
             comments=(
                 "Browse your recipes by tag or favorite, then open one to "
                 "cook with larger type, step focus, and kitchen timers.\n\n"
@@ -1487,22 +1495,17 @@ class PinchBowlWindow(Adw.ApplicationWindow):
         self.outer_paned.set_position(self.settings.nav_width)
         self.list_paned.set_position(self.settings.list_width)
         self.recipe_view.apply_appearance()
-        # set_position reallocates on a later frame; sync after that so the side
-        # column isn't stuck at the pre-pane width until the next recipe switch.
+        # Side column fraction depends on the detail pane's allocated width.
         GLib.idle_add(self.recipe_view.sync_layout)
 
-    def _apply_layout_later(self) -> bool:
-        self._layout_tries += 1
-        if self.get_width() < 100 and self._layout_tries < 30:
-            return True
+    def _on_first_map(self, *_args: object) -> None:
+        if self._ready:
+            return
         self.apply_layout_from_settings()
         self._ready = True
-        # One more pass after the paned allocation is realized.
-        GLib.timeout_add(50, self.recipe_view.sync_layout)
         if not self.settings.welcome_seen and not self._welcome_scheduled:
             self._welcome_scheduled = True
             GLib.idle_add(self._show_welcome_once)
-        return False
 
     def _show_welcome_once(self) -> bool:
         if self._closed or self.settings.welcome_seen:

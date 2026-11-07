@@ -9,7 +9,7 @@ APP_TAGLINE = "mise en place"
 
 
 def version() -> str:
-    return os.environ.get("PINCHBOWL_VERSION") or "1.0.20"
+    return os.environ.get("PINCHBOWL_VERSION") or "1.0.21"
 
 
 def project_root() -> Path:

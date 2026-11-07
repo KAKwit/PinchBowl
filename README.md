@@ -10,16 +10,18 @@ A native GNOME recipe app inspired by [Mela](https://mela.recipes). Clean three-
 **License:** GPL-3.0-or-later  
 **Stack:** Python 3 · GTK 4 · libadwaita
 
-<p align="center">
-  <a href="data/screenshots/01-library.png"><img src="data/screenshots/01-library.png" alt="Library" width="280"></a>
-  <a href="data/screenshots/02-cook-mode.png"><img src="data/screenshots/02-cook-mode.png" alt="Cook mode" width="280"></a>
-  <a href="data/screenshots/03-groceries.png"><img src="data/screenshots/03-groceries.png" alt="Groceries" width="280"></a>
-</p>
-<p align="center">
-  <a href="data/screenshots/04-ai-generate.png"><img src="data/screenshots/04-ai-generate.png" alt="AI Generate" width="280"></a>
-  <a href="data/screenshots/05-ai-recipe.png"><img src="data/screenshots/05-ai-recipe.png" alt="AI recipe" width="280"></a>
-  <a href="data/screenshots/06-preferences.png"><img src="data/screenshots/06-preferences.png" alt="Preferences" width="280"></a>
-</p>
+<table>
+  <tr>
+    <td align="center"><a href="data/screenshots/01-library.png"><img src="data/screenshots/01-library.png" alt="Library" width="260"></a></td>
+    <td align="center"><a href="data/screenshots/02-cook-mode.png"><img src="data/screenshots/02-cook-mode.png" alt="Cook mode" width="260"></a></td>
+    <td align="center"><a href="data/screenshots/03-groceries.png"><img src="data/screenshots/03-groceries.png" alt="Groceries" width="260"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="data/screenshots/04-ai-generate.png"><img src="data/screenshots/04-ai-generate.png" alt="AI Generate" width="260"></a></td>
+    <td align="center"><a href="data/screenshots/05-ai-recipe.png"><img src="data/screenshots/05-ai-recipe.png" alt="AI recipe" width="260"></a></td>
+    <td align="center"><a href="data/screenshots/06-preferences.png"><img src="data/screenshots/06-preferences.png" alt="Preferences" width="260"></a></td>
+  </tr>
+</table>
 
 ## Run from source
 
@@ -92,7 +94,7 @@ flatpak-builder --user --install --force-clean build-dir flatpak/dev.kakwit.Pinc
 flatpak run dev.kakwit.PinchBowl
 ```
 
-A push to `master` or `main` (and pull requests) builds the Flatpak on GitHub Actions and keeps `dev.kakwit.PinchBowl-x86_64.flatpak` as an artifact. Publishing a downloadable release is optional: push a tag named `v` plus the version (for example `v1.0.20`), or run the Flatpak workflow manually with **Create a GitHub Release…** enabled. That attaches the bundle to the GitHub Release. Install a downloaded bundle with:
+A push to `master` or `main` (and pull requests) builds the Flatpak on GitHub Actions and keeps `dev.kakwit.PinchBowl-x86_64.flatpak` as an artifact. Publishing a downloadable release is optional: push a tag named `v` plus the version (for example `v1.0.21`), or run the Flatpak workflow manually with **Create a GitHub Release…** enabled. That attaches the bundle to the GitHub Release. Install a downloaded bundle with:
 
 ```bash
 flatpak install --user dev.kakwit.PinchBowl-x86_64.flatpak

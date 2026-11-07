@@ -54,6 +54,15 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.0.21" date="2026-11-07">
+      <description>
+        <p>
+          README screenshot gallery is a stable 2×3 grid; About links to
+          the GitHub homepage and issue tracker; apply remembered pane
+          widths before the first frame to avoid startup layout jump.
+        </p>
+      </description>
+    </release>
     <release version="1.0.20" date="2026-11-07">
       <description>
         <p>

@@ -1,6 +1,6 @@
 [project]
 name = "pinchbowl"
-version = "1.0.20"
+version = "1.0.21"
 description = "GNOME recipe app inspired by Mela"
 requires-python = ">=3.11"
 license = { text = "GPL-3.0-or-later" }
