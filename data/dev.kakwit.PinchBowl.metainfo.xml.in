@@ -54,6 +54,14 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.0.22" date="2026-11-07">
+      <description>
+        <p>
+          Flatpak build bundles libcanberra so GSound (cook-timer audio)
+          can compile on the GNOME 51 SDK.
+        </p>
+      </description>
+    </release>
     <release version="1.0.21" date="2026-11-07">
       <description>
         <p>

@@ -94,7 +94,7 @@ flatpak-builder --user --install --force-clean build-dir flatpak/dev.kakwit.Pinc
 flatpak run dev.kakwit.PinchBowl
 ```
 
-A push to `master` or `main` (and pull requests) builds the Flatpak on GitHub Actions and keeps `dev.kakwit.PinchBowl-x86_64.flatpak` as an artifact. Publishing a downloadable release is optional: push a tag named `v` plus the version (for example `v1.0.21`), or run the Flatpak workflow manually with **Create a GitHub Release…** enabled. That attaches the bundle to the GitHub Release. Install a downloaded bundle with:
+A push to `master` or `main` (and pull requests) builds the Flatpak on GitHub Actions and keeps `dev.kakwit.PinchBowl-x86_64.flatpak` as an artifact. Publishing a downloadable release is optional: push a tag named `v` plus the version (for example `v1.0.22`), or run the Flatpak workflow manually with **Create a GitHub Release…** enabled. That attaches the bundle to the GitHub Release. Install a downloaded bundle with:
 
 ```bash
 flatpak install --user dev.kakwit.PinchBowl-x86_64.flatpak
