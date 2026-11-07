@@ -1,0 +1,14 @@
+[project]
+name = "pinchbowl"
+version = "1.0.20"
+description = "GNOME recipe app inspired by Mela"
+requires-python = ">=3.11"
+license = { text = "GPL-3.0-or-later" }
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]

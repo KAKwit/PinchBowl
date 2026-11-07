@@ -1,0 +1,14 @@
+#!@PYTHON@
+
+import os
+import sys
+
+pkgdatadir = '@pkgdatadir@'
+sys.path.insert(1, pkgdatadir)
+os.environ.setdefault('PINCHBOWL_DATA_DIR', os.path.join(pkgdatadir, 'data'))
+os.environ.setdefault('PINCHBOWL_VERSION', '@VERSION@')
+
+from pinchbowl.main import main
+
+if __name__ == '__main__':
+    sys.exit(main())

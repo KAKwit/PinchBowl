@@ -1,0 +1,222 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dev.kakwit.PinchBowl</id>
+  <name>Pinch Bowl</name>
+  <summary>Clean recipe manager for GNOME</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <developer id="dev.kakwit">
+    <name>KAKwit</name>
+  </developer>
+  <description>
+    <p>
+      Pinch Bowl is a focused recipe app for GNOME, inspired by Mela.
+      Browse by tags, import recipes from the web or Mela exports, scale
+      quantities, and cook distraction-free.
+    </p>
+    <ul>
+      <li>Three-pane layout: navigation, recipe list, and recipe detail</li>
+      <li>Import from Schema.org Recipe markup, Mela files, and guided AI paste; export to Mela</li>
+      <li>Scale servings and convert metric ↔ US units</li>
+      <li>Distraction-free cook mode with step focus and kitchen timers</li>
+      <li>Shared groceries checklist fed from recipes or free-text items</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">dev.kakwit.PinchBowl.desktop</launchable>
+  <url type="homepage">https://github.com/KAKwit/PinchBowl</url>
+  <url type="bugtracker">https://github.com/KAKwit/PinchBowl/issues</url>
+  <url type="vcs-browser">https://github.com/KAKwit/PinchBowl</url>
+  <content_rating type="oars-1.1"/>
+  <screenshots>
+    <screenshot type="default">
+      <image type="source" width="1970" height="1130">https://raw.githubusercontent.com/KAKwit/PinchBowl/main/data/screenshots/01-library.png</image>
+      <caption>Three-pane library with recipe directions and ingredients</caption>
+    </screenshot>
+    <screenshot>
+      <image type="source" width="2560" height="1440">https://raw.githubusercontent.com/KAKwit/PinchBowl/main/data/screenshots/02-cook-mode.png</image>
+      <caption>Distraction-free cook mode with step focus</caption>
+    </screenshot>
+    <screenshot>
+      <image type="source" width="1970" height="1130">https://raw.githubusercontent.com/KAKwit/PinchBowl/main/data/screenshots/03-groceries.png</image>
+      <caption>Shared groceries checklist</caption>
+    </screenshot>
+    <screenshot>
+      <image type="source" width="1970" height="1130">https://raw.githubusercontent.com/KAKwit/PinchBowl/main/data/screenshots/04-ai-generate.png</image>
+      <caption>Guided AI paste import</caption>
+    </screenshot>
+    <screenshot>
+      <image type="source" width="1970" height="1130">https://raw.githubusercontent.com/KAKwit/PinchBowl/main/data/screenshots/05-ai-recipe.png</image>
+      <caption>An AI-imported recipe in the library</caption>
+    </screenshot>
+    <screenshot>
+      <image type="source" width="1970" height="1130">https://raw.githubusercontent.com/KAKwit/PinchBowl/main/data/screenshots/06-preferences.png</image>
+      <caption>Preferences for appearance and Mela import</caption>
+    </screenshot>
+  </screenshots>
+  <releases>
+    <release version="1.0.20" date="2026-11-07">
+      <description>
+        <p>
+          README shows the logo and screenshots; AppStream metainfo links
+          the same gallery for software centers.
+        </p>
+      </description>
+    </release>
+    <release version="1.0.19" date="2026-11-07">
+      <description>
+        <p>
+          Rebrand developer identity to KAKwit; app id is now
+          dev.kakwit.PinchBowl.
+        </p>
+      </description>
+    </release>
+    <release version="1.0.18" date="2026-11-07">
+      <description>
+        <p>
+          Version scheme is now 1.0.x. Optional Flatpak GitHub Releases via
+          v* tags (same pattern as Footy Cheat).
+        </p>
+      </description>
+    </release>
+    <release version="0.1.18" date="2026-11-07">
+      <description>
+        <p>
+          Show imported recipes in the detail view when selected; clear
+          favorite and want-to-cook on Mela re-import; tighten selection
+          actions and About dialog metadata.
+        </p>
+      </description>
+    </release>
+    <release version="0.1.17" date="2026-11-06">
+      <description>
+        <p>
+          Default sort is title ascending; restore defaults updates the sort menu.
+        </p>
+      </description>
+    </release>
+    <release version="0.1.16" date="2026-11-06">
+      <description>
+        <p>
+          Larger Pinch Bowl mark on the welcome tour’s first slide.
+        </p>
+      </description>
+    </release>
+    <release version="0.1.15" date="2026-11-06">
+      <description>
+        <p>
+          Welcome tour shows full slide text; disable scroll-wheel page nudging.
+        </p>
+      </description>
+    </release>
+    <release version="0.1.14" date="2026-11-06">
+      <description>
+        <p>
+          Fix welcome tour slides so each page fills the dialog width.
+        </p>
+      </description>
+    </release>
+    <release version="0.1.13" date="2026-11-06">
+      <description>
+        <p>
+          First-run welcome tour covering main features; replay from the menu.
+        </p>
+      </description>
+    </release>
+    <release version="0.1.12" date="2026-11-06">
+      <description>
+        <p>
+          Preferences restore defaults no longer resets the sidebar tags section.
+        </p>
+      </description>
+    </release>
+    <release version="0.1.11" date="2026-11-06">
+      <description>
+        <p>
+          Strip bracketed notes when adding recipe ingredients to groceries.
+        </p>
+      </description>
+    </release>
+    <release version="0.1.10" date="2026-11-06">
+      <description>
+        <p>
+          Watch a Mela export file and auto-import new recipes.
+        </p>
+      </description>
+    </release>
+    <release version="0.1.9" date="2026-11-06">
+      <description>
+        <p>
+          Export the whole library to a Mela .melarecipes archive from Preferences.
+        </p>
+      </description>
+    </release>
+    <release version="0.1.8" date="2026-11-03">
+      <description>
+        <p>
+          Start with an empty library instead of sample recipes.
+        </p>
+      </description>
+    </release>
+    <release version="0.1.7" date="2026-11-03">
+      <description>
+        <p>
+          Show a progress dialog with cancel while importing Mela recipes.
+        </p>
+      </description>
+    </release>
+    <release version="0.1.6" date="2026-11-03">
+      <description>
+        <p>
+          Slightly smaller recipe titles in the list.
+        </p>
+      </description>
+    </release>
+    <release version="0.1.4" date="2026-11-03">
+      <description>
+        <p>
+          Keep recipe list rows alive and filter them in place so switching
+          All / Favorites / tags stays instant on larger libraries.
+        </p>
+      </description>
+    </release>
+    <release version="0.1.3" date="2026-11-03">
+      <description>
+        <p>
+          Cache list thumbnails on disk so switching filters with a large
+          library stays responsive.
+        </p>
+      </description>
+    </release>
+    <release version="0.1.2" date="2026-11-03">
+      <description>
+        <p>
+          Document Flatpak CI, versioning, and agent packaging guidance.
+        </p>
+      </description>
+    </release>
+    <release version="0.1.1" date="2026-11-03">
+      <description>
+        <p>
+          Flatpak packaging on GNOME 51 and a GitHub Actions build that
+          produces a bundle on each push.
+        </p>
+      </description>
+    </release>
+    <release version="0.1.0" date="2026-11-01">
+      <description>
+        <p>
+          First release: three-pane library, URL / Mela / AI paste import,
+          export, Adjust scaling, cook mode with timers, and groceries.
+        </p>
+      </description>
+    </release>
+  </releases>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <control>touch</control>
+  </supports>
+</component>

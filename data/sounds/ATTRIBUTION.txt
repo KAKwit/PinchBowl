@@ -1,0 +1,8 @@
+alarm-clock-beep.wav
+  Title:  Alarm clock beep
+  Author: Kesu
+  Source: https://freesound.org/people/Kesu/sounds/182351/
+  License: Creative Commons 0 (CC0 1.0)
+           https://creativecommons.org/publicdomain/zero/1.0/
+
+Converted from the original IEEE-float WAV to 16-bit PCM for playback via GSound/libcanberra.

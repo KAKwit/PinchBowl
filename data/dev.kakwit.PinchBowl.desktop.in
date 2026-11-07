@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Pinch Bowl
+Comment=Recipes for GNOME
+Exec=pinch-bowl
+Icon=dev.kakwit.PinchBowl
+Terminal=false
+Type=Application
+Categories=Utility;GNOME;GTK;
+Keywords=recipes;cooking;food;mela;
+StartupNotify=true
+DBusActivatable=false
+X-GNOME-UsesNotifications=true

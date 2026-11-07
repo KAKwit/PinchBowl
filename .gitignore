@@ -1,0 +1,27 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+build-dir/
+.flatpak-builder/
+*.db
+.cache/
+dist/
+.mesonpy/
+.pytest_cache/
+.mypy_cache/
+*.mo
+*.so
+
+# Agent / AI tooling (local only — not part of the public project)
+AGENTS.md
+.cursor/
+.cursorrules
+CLAUDE.md
+.claude/
+.codex/
+.github/copilot-instructions.md
+.idea/**/workspace.xml
+*.code-workspace
