@@ -77,6 +77,7 @@ class Store:
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.conn.executescript(SCHEMA)
         self._ensure_columns()
+        self._repair_ai_source_urls()
         self._ensure_fts()
         self.conn.commit()
 
@@ -90,6 +91,28 @@ class Store:
             self.conn.execute(
                 "ALTER TABLE recipes ADD COLUMN ai_prompt TEXT NOT NULL DEFAULT ''"
             )
+
+    def _repair_ai_source_urls(self) -> None:
+        """Clear bogus URLs created by treating ``AI generated`` as a host."""
+        # Older Mela export prefixed https:// onto the label; clean_url then
+        # stored hosts like "ai generated". Restore the label and drop the URL.
+        self.conn.execute(
+            """
+            UPDATE recipes SET
+                source = 'AI generated',
+                source_url = '',
+                canonical_url = ''
+            WHERE
+                lower(trim(source, '/')) = 'ai generated'
+                OR lower(source_url) IN (
+                    'https://ai generated/',
+                    'http://ai generated/',
+                    'https://ai generated',
+                    'http://ai generated'
+                )
+                OR lower(canonical_url) IN ('ai generated/', 'ai generated')
+            """
+        )
 
     def _ensure_fts(self) -> None:
         """Rebuild FTS if it drifted (e.g. recipes existed before the FTS table)."""

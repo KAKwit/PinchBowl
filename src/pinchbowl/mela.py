@@ -73,7 +73,14 @@ def recipe_to_melarecipe(recipe: Recipe) -> dict[str, Any]:
     link = (recipe.source_url or "").strip()
     if not link and recipe.source.strip():
         source = recipe.source.strip()
-        link = source if "://" in source else f"https://{source}"
+        # Keep non-URL labels (e.g. "AI generated", cookbook names) as-is.
+        # Prefixing https:// turns them into bogus hosts like "ai generated".
+        if source.startswith("http://") or source.startswith("https://"):
+            link = source
+        elif "." in source.split("/", 1)[0] and " " not in source:
+            link = f"https://{source}"
+        else:
+            link = source
     images: list[str] = []
     if recipe.image_path:
         try:

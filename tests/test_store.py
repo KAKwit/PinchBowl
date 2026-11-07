@@ -124,3 +124,38 @@ def test_fts_prefix_query_helper() -> None:
     assert Store._fts_prefix_query('hello "world"') == "hello* world*"
     assert Store._fts_prefix_query("   ") is None
     assert Store._fts_prefix_query("---") is None
+
+
+def test_repairs_bogus_ai_generated_urls(tmp_xdg: Path) -> None:
+    from pinchbowl.paths import recipes_db_path
+
+    db = recipes_db_path()
+    first = Store(db)
+    recipe = first.upsert_recipe(
+        title="Pie",
+        ingredients="beef",
+        instructions="bake",
+        source="AI generated",
+        source_url="",
+        ai_prompt="",
+    )
+    first.conn.execute(
+        """
+        UPDATE recipes
+        SET source_url = ?, canonical_url = ?
+        WHERE id = ?
+        """,
+        ("https://ai generated/", "ai generated/", recipe.id),
+    )
+    first.conn.commit()
+    first.close()
+
+    repaired = Store(db)
+    row = repaired.get(recipe.id)
+    assert row is not None
+    assert row.source == "AI generated"
+    assert row.source_url == ""
+    assert repaired.conn.execute(
+        "SELECT canonical_url FROM recipes WHERE id = ?", (recipe.id,)
+    ).fetchone()[0] == ""
+    repaired.close()

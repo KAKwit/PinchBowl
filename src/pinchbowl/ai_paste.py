@@ -15,6 +15,26 @@ from pinchbowl.schema_recipe import (
 
 AI_SOURCE_LABEL = "AI generated"
 
+
+def is_ai_recipe(
+    *,
+    source: str = "",
+    source_url: str = "",
+    ai_prompt: str = "",
+) -> bool:
+    """True when the recipe should use the AI prompt chip (not Open URL)."""
+    if (ai_prompt or "").strip():
+        return True
+    src = (source or "").strip()
+    if src == AI_SOURCE_LABEL:
+        return True
+    # Corrupted older rows: label was fed through clean_url / Mela https-prefix.
+    lowered = src.lower().rstrip("/")
+    if lowered == AI_SOURCE_LABEL.lower():
+        return True
+    blob = f"{src} {(source_url or '').strip()}".lower()
+    return "ai generated" in blob
+
 _FENCE_RE = re.compile(
     r"```(?:json|JSON)?\s*\n?(.*?)\n?```",
     re.DOTALL,

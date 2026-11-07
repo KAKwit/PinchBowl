@@ -46,6 +46,22 @@ _TRACKING_KEYS = {
 }
 
 
+def _plausible_host(host: str) -> bool:
+    """Reject labels that urllib will accept but are not real hosts.
+
+    Bare strings like ``AI generated`` or ``My Cookbook`` must not become
+    ``https://ai generated/`` via schemeless https-prepending.
+    """
+    if not host or " " in host:
+        return False
+    if host == "localhost":
+        return True
+    # Real recipe hosts are domains (have a dot) or numeric IPs.
+    if "." in host:
+        return True
+    return False
+
+
 def _split_clean(url: str) -> tuple[str, str, str, str] | None:
     raw = (url or "").strip()
     if not raw:
@@ -55,7 +71,7 @@ def _split_clean(url: str) -> tuple[str, str, str, str] | None:
     parts = urlsplit(raw)
     scheme = (parts.scheme or "https").lower()
     host = (parts.hostname or "").lower().removeprefix("www.")
-    if not host:
+    if not _plausible_host(host):
         return None
     netloc = host
     if parts.port:

@@ -13,6 +13,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango
 
 from pinchbowl.adjust_dialog import AdjustDialog
 from pinchbowl.ai_generate_view import AiGenerateView
+from pinchbowl.ai_paste import is_ai_recipe
 from pinchbowl.cook_view import CookView
 from pinchbowl.groceries_dialog import grocery_candidate_lines, present_groceries_dialog
 from pinchbowl.groceries_view import GroceriesView
@@ -1030,6 +1031,12 @@ class PinchBowlWindow(Adw.ApplicationWindow):
     def _source_url(self) -> str:
         recipe = self.recipe_view.recipe
         if recipe is None:
+            return ""
+        if is_ai_recipe(
+            source=recipe.source,
+            source_url=recipe.source_url,
+            ai_prompt=recipe.ai_prompt,
+        ):
             return ""
         return openable_url(recipe.source_url, recipe.source)
 

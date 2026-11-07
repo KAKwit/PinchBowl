@@ -10,6 +10,7 @@ from pinchbowl.ai_paste import (
     PasteParseError,
     build_ai_prompt,
     extract_json_candidates,
+    is_ai_recipe,
     parse_ai_paste,
 )
 
@@ -58,3 +59,11 @@ def test_parse_errors() -> None:
         parse_ai_paste("{not json")
     with pytest.raises(PasteParseError):
         parse_ai_paste('{"@type":"Recipe","name":""}')
+
+
+def test_is_ai_recipe() -> None:
+    assert is_ai_recipe(source=AI_SOURCE_LABEL)
+    assert is_ai_recipe(ai_prompt="make a cake")
+    assert is_ai_recipe(source="ai generated/")
+    assert is_ai_recipe(source_url="https://ai generated/")
+    assert not is_ai_recipe(source="recipetineats.com", source_url="https://x.test/r")

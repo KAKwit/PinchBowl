@@ -33,6 +33,15 @@ def test_openable_url() -> None:
     assert openable_url("https://a.test/r", "") == "https://a.test/r"
     assert openable_url("", "b.test/path") == "https://b.test/path"
     assert openable_url("", "My Cookbook") == ""
+    assert openable_url("https://ai generated/", "AI generated") == ""
+    assert openable_url("", "AI generated") == ""
+
+
+def test_clean_url_rejects_label_hosts() -> None:
+    assert clean_url("AI generated") == ""
+    assert clean_url("https://ai generated/") == ""
+    assert canonicalize_url("AI generated") == ""
+    assert clean_url("My Cookbook") == ""
 
 
 def test_source_display() -> None:
@@ -41,4 +50,8 @@ def test_source_display() -> None:
         True,
     )
     assert source_display("", "AI generated") == ("AI generated", False)
+    assert source_display("https://ai generated/", "AI generated") == (
+        "AI generated",
+        False,
+    )
     assert source_display("", "vero.cooking/pasta") == ("vero.cooking", True)

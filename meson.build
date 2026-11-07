@@ -1,6 +1,6 @@
 project(
   'pinch-bowl',
-  version: '1.0.22',
+  version: '1.0.23',
   meson_version: '>= 1.2.0',
   default_options: ['warning_level=2'],
 )

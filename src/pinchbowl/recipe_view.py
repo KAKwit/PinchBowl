@@ -13,7 +13,7 @@ gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango
 
 from pinchbowl.adjust import adjust_ingredients, scale_yield_text
-from pinchbowl.ai_paste import AI_SOURCE_LABEL
+from pinchbowl.ai_paste import AI_SOURCE_LABEL, is_ai_recipe
 from pinchbowl.directions import parse_instructions
 from pinchbowl.duration import format_duration_text
 from pinchbowl.fonts import css_font_family
@@ -481,11 +481,16 @@ class RecipeView(Gtk.Box):
         source_tags.set_halign(Gtk.Align.START)
         source_tags.set_valign(Gtk.Align.CENTER)
 
+        is_ai = is_ai_recipe(
+            source=recipe.source,
+            source_url=recipe.source_url,
+            ai_prompt=recipe.ai_prompt,
+        )
         site, is_web = source_display(recipe.source_url, recipe.source)
-        url = openable_url(recipe.source_url, recipe.source)
-        is_ai = (
-            bool(recipe.ai_prompt.strip())
-            or recipe.source.strip() == AI_SOURCE_LABEL
+        url = (
+            ""
+            if is_ai
+            else openable_url(recipe.source_url, recipe.source)
         )
         if is_ai:
             source_tags.append(

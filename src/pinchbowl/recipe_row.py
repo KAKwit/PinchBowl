@@ -9,6 +9,7 @@ gi.require_version("Gdk", "4.0")
 
 from gi.repository import Gtk, Pango
 
+from pinchbowl.ai_paste import AI_SOURCE_LABEL, is_ai_recipe
 from pinchbowl.images import request_list_thumb
 from pinchbowl.models import Recipe
 from pinchbowl.urls import source_display
@@ -93,12 +94,21 @@ class RecipeRow(Gtk.ListBoxRow):
                 _meta_part("user-bookmarks-symbolic", ", ".join(recipe.tags))
             )
 
-        label, is_web = source_display(recipe.source_url, recipe.source)
-        if label:
-            icon = (
-                "insert-link-symbolic" if is_web else "x-office-address-book-symbolic"
-            )
-            meta.append(_meta_part(icon, label))
+        if is_ai_recipe(
+            source=recipe.source,
+            source_url=recipe.source_url,
+            ai_prompt=recipe.ai_prompt,
+        ):
+            meta.append(_meta_part("emoji-objects-symbolic", AI_SOURCE_LABEL))
+        else:
+            label, is_web = source_display(recipe.source_url, recipe.source)
+            if label:
+                icon = (
+                    "insert-link-symbolic"
+                    if is_web
+                    else "x-office-address-book-symbolic"
+                )
+                meta.append(_meta_part(icon, label))
 
         col.append(title)
         if meta.get_first_child() is not None:

@@ -73,6 +73,23 @@ def test_roundtrip_melarecipe(tmp_xdg: Path, store: Store) -> None:
     assert json.dumps(exported)
 
 
+def test_export_preserves_ai_label_without_fake_url() -> None:
+    recipe = Recipe(
+        id=1,
+        uid="ai-1",
+        title="Pie",
+        ingredients="beef",
+        instructions="bake",
+        source="AI generated",
+        ai_prompt="make a pie",
+    )
+    exported = recipe_to_melarecipe(recipe)
+    assert exported["link"] == "AI generated"
+    mapped = parse_melarecipe(exported)
+    assert mapped["source"] == "AI generated"
+    assert mapped["source_url"] == ""
+
+
 def test_import_file(tmp_xdg: Path, store: Store, tmp_path: Path) -> None:
     from pinchbowl.mela import import_melarecipe_file
 

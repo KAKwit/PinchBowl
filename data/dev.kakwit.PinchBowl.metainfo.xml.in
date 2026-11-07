@@ -54,6 +54,14 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.0.23" date="2026-11-07">
+      <description>
+        <p>
+          Fix AI generated source chip opening a bogus URL instead of the
+          saved prompt; stop treating the “AI generated” label as a website.
+        </p>
+      </description>
+    </release>
     <release version="1.0.22" date="2026-11-07">
       <description>
         <p>
