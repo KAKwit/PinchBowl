@@ -54,6 +54,22 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.0.25" date="2026-11-08">
+      <description>
+        <p>
+          Fix grocery items with “&amp;” (and other markup characters) not
+          showing in the list.
+        </p>
+      </description>
+    </release>
+    <release version="1.0.24" date="2026-11-08">
+      <description>
+        <p>
+          Groceries list can edit items, sort by date added or name, and
+          search to find items already on the list.
+        </p>
+      </description>
+    </release>
     <release version="1.0.23" date="2026-11-07">
       <description>
         <p>

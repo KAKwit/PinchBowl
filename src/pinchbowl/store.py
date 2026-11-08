@@ -50,7 +50,8 @@ CREATE TABLE IF NOT EXISTS grocery_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     text TEXT NOT NULL,
     checked INTEGER NOT NULL DEFAULT 0,
-    position INTEGER NOT NULL DEFAULT 0
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at REAL NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_recipe_tags_tag ON recipe_tags(tag);
@@ -83,14 +84,33 @@ class Store:
 
     def _ensure_columns(self) -> None:
         """Add columns introduced after the initial schema (existing DBs)."""
-        cols = {
+        recipe_cols = {
             str(r["name"])
             for r in self.conn.execute("PRAGMA table_info(recipes)").fetchall()
         }
-        if "ai_prompt" not in cols:
+        if "ai_prompt" not in recipe_cols:
             self.conn.execute(
                 "ALTER TABLE recipes ADD COLUMN ai_prompt TEXT NOT NULL DEFAULT ''"
             )
+
+        grocery_cols = {
+            str(r["name"])
+            for r in self.conn.execute("PRAGMA table_info(grocery_items)").fetchall()
+        }
+        if "created_at" not in grocery_cols:
+            self.conn.execute(
+                "ALTER TABLE grocery_items ADD COLUMN created_at REAL NOT NULL DEFAULT 0"
+            )
+            # Preserve append order for existing rows (oldest first).
+            rows = self.conn.execute(
+                "SELECT id FROM grocery_items ORDER BY position ASC, id ASC"
+            ).fetchall()
+            base = time.time() - max(len(rows), 1)
+            for i, row in enumerate(rows):
+                self.conn.execute(
+                    "UPDATE grocery_items SET created_at = ? WHERE id = ?",
+                    (base + i, int(row["id"])),
+                )
 
     def _repair_ai_source_urls(self) -> None:
         """Clear bogus URLs created by treating ``AI generated`` as a host."""
@@ -525,10 +545,16 @@ class Store:
         clear_list_thumbs()
         return count
 
-    def list_grocery_items(self) -> list[GroceryItem]:
+    def list_grocery_items(
+        self, *, sort: str = "created", ascending: bool = True
+    ) -> list[GroceryItem]:
+        direction = "ASC" if ascending else "DESC"
+        if sort == "text":
+            order = f"ORDER BY lower(text) {direction}, id ASC"
+        else:
+            order = f"ORDER BY created_at {direction}, id ASC"
         rows = self.conn.execute(
-            "SELECT id, text, checked, position FROM grocery_items "
-            "ORDER BY position ASC, id ASC"
+            f"SELECT id, text, checked, position, created_at FROM grocery_items {order}"
         ).fetchall()
         return [
             GroceryItem(
@@ -536,6 +562,7 @@ class Store:
                 text=str(row["text"]),
                 checked=bool(row["checked"]),
                 position=int(row["position"]),
+                created_at=float(row["created_at"]),
             )
             for row in rows
         ]
@@ -547,19 +574,34 @@ class Store:
         ).fetchone()
         position = int(row["m"]) + 1 if row else 0
         added = 0
+        now = time.time()
         for raw in texts:
             text = " ".join(str(raw).split())
             if not text:
                 continue
             self.conn.execute(
-                "INSERT INTO grocery_items (text, checked, position) VALUES (?, 0, ?)",
-                (text, position),
+                "INSERT INTO grocery_items (text, checked, position, created_at) "
+                "VALUES (?, 0, ?, ?)",
+                (text, position, now),
             )
             position += 1
+            now += 0.001
             added += 1
         if added:
             self.conn.commit()
         return added
+
+    def update_grocery_text(self, item_id: int, text: str) -> bool:
+        """Rename a grocery line. Returns True if a row was updated."""
+        cleaned = " ".join(str(text).split())
+        if not cleaned:
+            return False
+        cur = self.conn.execute(
+            "UPDATE grocery_items SET text = ? WHERE id = ?",
+            (cleaned, item_id),
+        )
+        self.conn.commit()
+        return int(cur.rowcount or 0) > 0
 
     def set_grocery_checked(self, item_id: int, checked: bool) -> None:
         self.conn.execute(

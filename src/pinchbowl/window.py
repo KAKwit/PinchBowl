@@ -169,7 +169,7 @@ class PinchBowlWindow(Adw.ApplicationWindow):
         menu.append("About Pinch Bowl", "win.about")
         self.recipe_view.set_menu_model(menu)
 
-        self.groceries_view = GroceriesView(store)
+        self.groceries_view = GroceriesView(store, self.settings)
         self.groceries_view.set_menu_model(menu)
         self.groceries_view.on_clear_done = self._clear_grocery_done
         self.groceries_view.on_clear_all = self._clear_grocery_all
@@ -620,6 +620,7 @@ class PinchBowlWindow(Adw.ApplicationWindow):
         self.recipe_view.apply_appearance()
         self.cook_view.apply_appearance()
         self._sync_sort_actions_from_settings()
+        self.groceries_view.sync_sort_from_settings()
         self.refresh()
         self.toaster.add_toast(Adw.Toast(title="Defaults restored"))
 

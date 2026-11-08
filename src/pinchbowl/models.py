@@ -13,6 +13,7 @@ class GroceryItem:
     text: str
     checked: bool = False
     position: int = 0
+    created_at: float = 0.0
 
 
 @dataclass

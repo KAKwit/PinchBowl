@@ -120,6 +120,66 @@ def test_clear_library_clears_groceries(store: Store) -> None:
     assert store.list_grocery_items() == []
 
 
+def test_grocery_items_have_created_at_and_sort(store: Store) -> None:
+    store.add_grocery_items(["milk", "eggs", "apples"])
+    items = store.list_grocery_items(sort="created", ascending=True)
+    assert [i.text for i in items] == ["milk", "eggs", "apples"]
+    assert items[0].created_at > 0
+    assert items[0].created_at <= items[1].created_at <= items[2].created_at
+
+    newest_first = store.list_grocery_items(sort="created", ascending=False)
+    assert [i.text for i in newest_first] == ["apples", "eggs", "milk"]
+
+    by_name = store.list_grocery_items(sort="text", ascending=True)
+    assert [i.text for i in by_name] == ["apples", "eggs", "milk"]
+
+
+def test_update_grocery_text(store: Store) -> None:
+    store.add_grocery_items(["milk"])
+    item = store.list_grocery_items()[0]
+    assert store.update_grocery_text(item.id, "  oat milk  ") is True
+    updated = store.list_grocery_items()[0]
+    assert updated.text == "oat milk"
+    assert store.update_grocery_text(item.id, "   ") is False
+    assert store.list_grocery_items()[0].text == "oat milk"
+
+
+def test_grocery_created_at_migration(tmp_xdg: Path) -> None:
+    """Existing DBs without created_at get the column and a stable backfill."""
+    import sqlite3
+
+    from pinchbowl.paths import recipes_db_path
+
+    db = recipes_db_path()
+    db.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db))
+    conn.executescript(
+        """
+        CREATE TABLE grocery_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            text TEXT NOT NULL,
+            checked INTEGER NOT NULL DEFAULT 0,
+            position INTEGER NOT NULL DEFAULT 0
+        );
+        INSERT INTO grocery_items (text, checked, position) VALUES ('old', 0, 0);
+        INSERT INTO grocery_items (text, checked, position) VALUES ('newer', 0, 1);
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    store = Store(db)
+    cols = {
+        str(r["name"])
+        for r in store.conn.execute("PRAGMA table_info(grocery_items)").fetchall()
+    }
+    assert "created_at" in cols
+    items = store.list_grocery_items(sort="created", ascending=True)
+    assert [i.text for i in items] == ["old", "newer"]
+    assert items[0].created_at < items[1].created_at
+    store.close()
+
+
 def test_fts_prefix_query_helper() -> None:
     assert Store._fts_prefix_query('hello "world"') == "hello* world*"
     assert Store._fts_prefix_query("   ") is None

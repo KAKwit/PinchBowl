@@ -19,6 +19,8 @@ DEFAULTS = {
     "list_width": 340,
     "list_sort": "title",
     "list_sort_ascending": True,
+    "grocery_sort": "created",
+    "grocery_sort_ascending": True,
     "sidebar_tags_expanded": True,
     # One-way Mela drop-in: path to a watched .melarecipe(s) file + last fingerprint.
     "mela_watch_path": "",
@@ -29,6 +31,7 @@ DEFAULTS = {
 }
 
 SORT_KEYS = frozenset({"created", "title", "time"})
+GROCERY_SORT_KEYS = frozenset({"created", "text"})
 
 WINDOW_DEFAULTS = {
     "window_width": 1280,
@@ -47,6 +50,8 @@ class Settings:
         self.list_width = DEFAULTS["list_width"]
         self.list_sort = DEFAULTS["list_sort"]
         self.list_sort_ascending = DEFAULTS["list_sort_ascending"]
+        self.grocery_sort = DEFAULTS["grocery_sort"]
+        self.grocery_sort_ascending = DEFAULTS["grocery_sort_ascending"]
         self.sidebar_tags_expanded = DEFAULTS["sidebar_tags_expanded"]
         self.mela_watch_path = DEFAULTS["mela_watch_path"]
         self.mela_watch_mtime = DEFAULTS["mela_watch_mtime"]
@@ -96,6 +101,11 @@ class Settings:
             self.list_sort = sort_key
         if "list_sort_ascending" in data:
             self.list_sort_ascending = bool(data.get("list_sort_ascending"))
+        grocery_sort_key = str(data.get("grocery_sort", self.grocery_sort))
+        if grocery_sort_key in GROCERY_SORT_KEYS:
+            self.grocery_sort = grocery_sort_key
+        if "grocery_sort_ascending" in data:
+            self.grocery_sort_ascending = bool(data.get("grocery_sort_ascending"))
         if "sidebar_tags_expanded" in data:
             self.sidebar_tags_expanded = bool(data.get("sidebar_tags_expanded"))
         self.mela_watch_path = str(data.get("mela_watch_path", self.mela_watch_path) or "")
@@ -130,6 +140,8 @@ class Settings:
             "list_width": self.list_width,
             "list_sort": self.list_sort,
             "list_sort_ascending": self.list_sort_ascending,
+            "grocery_sort": self.grocery_sort,
+            "grocery_sort_ascending": self.grocery_sort_ascending,
             "sidebar_tags_expanded": self.sidebar_tags_expanded,
             "mela_watch_path": self.mela_watch_path,
             "mela_watch_mtime": self.mela_watch_mtime,
