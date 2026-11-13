@@ -33,8 +33,8 @@ from pinchbowl.timers import (
 
 # Step column max width; Clamp centers it beside the ingredients column.
 _STEP_CLAMP = 840
-_ING_MAX = 400
-_ING_TIGHTEN = 320
+# Ingredients sidebar width (OverlaySplitView uses SP when unit is SP).
+_ING_MAX = 520
 # Collapse ingredients to an overlay below this width.
 _COOK_NARROW_SP = 720
 # Type ramp above the recipe preference.
@@ -173,10 +173,10 @@ class CookView(Gtk.Box):
         self.steps_scroll.add_controller(scroll_ctl)
 
         # Ingredients column (sidebar of OverlaySplitView; overlays when narrow)
-        ing_outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        ing_outer.add_css_class("pb-cook-ing-col")
-        ing_outer.set_hexpand(True)
-        ing_outer.set_vexpand(True)
+        self.ing_outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.ing_outer.add_css_class("pb-cook-ing-col")
+        self.ing_outer.set_hexpand(True)
+        self.ing_outer.set_vexpand(True)
 
         ing_heading = Gtk.Label(label="Ingredients", xalign=0)
         ing_heading.add_css_class("pb-cook-ing-heading")
@@ -184,7 +184,7 @@ class CookView(Gtk.Box):
         ing_heading.set_margin_end(20)
         ing_heading.set_margin_top(16)
         ing_heading.set_margin_bottom(8)
-        ing_outer.append(ing_heading)
+        self.ing_outer.append(ing_heading)
 
         self.ing_scroll = Gtk.ScrolledWindow()
         self.ing_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -197,22 +197,16 @@ class CookView(Gtk.Box):
         self.ingredients_box.set_margin_end(16)
         self.ingredients_box.set_margin_bottom(32)
         self.ing_scroll.set_child(self.ingredients_box)
-        ing_outer.append(self.ing_scroll)
-
-        ing_clamp = Adw.Clamp()
-        ing_clamp.set_maximum_size(_ING_MAX)
-        ing_clamp.set_tightening_threshold(_ING_TIGHTEN)
-        ing_clamp.set_child(ing_outer)
-        ing_clamp.set_hexpand(True)
+        self.ing_outer.append(self.ing_scroll)
 
         self.body_split = Adw.OverlaySplitView()
         self.body_split.set_sidebar_position(Gtk.PackType.END)
-        self.body_split.set_min_sidebar_width(240)
+        self.body_split.set_min_sidebar_width(280)
         self.body_split.set_max_sidebar_width(float(_ING_MAX))
-        self.body_split.set_sidebar_width_fraction(0.38)
+        self.body_split.set_sidebar_width_fraction(0.40)
         self.body_split.set_sidebar_width_unit(Adw.LengthUnit.SP)
         self.body_split.set_content(self.steps_scroll)
-        self.body_split.set_sidebar(ing_clamp)
+        self.body_split.set_sidebar(self.ing_outer)
         self.body_split.set_hexpand(True)
         self.body_split.set_vexpand(True)
         self.body_split.add_css_class("pb-cook-body")
@@ -256,6 +250,10 @@ class CookView(Gtk.Box):
     def _on_cook_split_collapsed(self, *_args: object) -> None:
         collapsed = self.body_split.get_collapsed()
         self.ing_toggle.set_visible(collapsed)
+        if collapsed:
+            self.ing_outer.add_css_class("pb-cook-ing-overlay")
+        else:
+            self.ing_outer.remove_css_class("pb-cook-ing-overlay")
         if not collapsed:
             self.body_split.set_show_sidebar(True)
             self.ing_toggle.set_active(False)
@@ -918,9 +916,6 @@ class CookView(Gtk.Box):
             .pb-cook-step.pb-cook-current {{
               opacity: 1;
               background-color: alpha(@accent_bg_color, 0.14);
-            }}
-            .pb-cook-ing-col {{
-              background-color: alpha(@view_fg_color, 0.04);
             }}
             .pb-cook-ing-heading {{
               font-size: {size - 1}px;

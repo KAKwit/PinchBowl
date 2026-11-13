@@ -54,6 +54,30 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.0.54" date="2026-11-13">
+      <description>
+        <p>
+          Fix the square box around cook-mode ingredients by clearing
+          OverlaySplitView’s sidebar-pane chrome behind the rounded card.
+        </p>
+      </description>
+    </release>
+    <release version="1.0.53" date="2026-11-13">
+      <description>
+        <p>
+          Widen cook-mode ingredients in fullscreen and remove the square
+          sidebar chrome behind the rounded card.
+        </p>
+      </description>
+    </release>
+    <release version="1.0.52" date="2026-11-13">
+      <description>
+        <p>
+          Cook-mode ingredients use a rounded, inset card instead of a hard
+          full-bleed panel edge.
+        </p>
+      </description>
+    </release>
     <release version="1.0.51" date="2026-11-13">
       <description>
         <p>
