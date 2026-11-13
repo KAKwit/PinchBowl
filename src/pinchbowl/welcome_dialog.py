@@ -73,7 +73,7 @@ class WelcomeDialog(Adw.Dialog):
     def __init__(self, *, on_closed: Callable[[], None] | None = None) -> None:
         super().__init__()
         self.set_title("Welcome")
-        # Stay within the adaptive window floor (360px) so AdwDialog does not
+        # Stay within the adaptive window floor (420px) so AdwDialog does not
         # warn when the library window is already narrow.
         self.set_content_width(self._CONTENT_WIDTH)
         self.set_content_height(self._CONTENT_HEIGHT)

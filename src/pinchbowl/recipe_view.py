@@ -576,6 +576,7 @@ class RecipeView(Gtk.Box):
             self.meta.append(yield_box)
 
         times = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        times.add_css_class("pb-meta-times")
         times.set_halign(Gtk.Align.START)
         times.set_valign(Gtk.Align.CENTER)
         for label, value in (
@@ -600,6 +601,18 @@ class RecipeView(Gtk.Box):
         self._render_ingredients(recipe.ingredients)
         self._set_hero(recipe.image_path)
         self.stack.set_visible_child_name("recipe")
+        self._scroll_body_to_top()
+        # Content height settles after the stack switch; keep the top pinned.
+        GLib.idle_add(self._scroll_body_to_top_idle)
+
+    def _scroll_body_to_top(self) -> None:
+        vadj = self.body_scroll.get_vadjustment()
+        if vadj is not None and vadj.get_value() != 0:
+            vadj.set_value(0)
+
+    def _scroll_body_to_top_idle(self) -> bool:
+        self._scroll_body_to_top()
+        return GLib.SOURCE_REMOVE
 
     def _render_directions(self, text: str) -> None:
         while (child := self.instructions_box.get_first_child()) is not None:
@@ -1134,8 +1147,10 @@ class RecipeView(Gtk.Box):
               color: @accent_color;
               -gtk-icon-style: symbolic;
             }}
-            .pb-meta-time {{
-              margin-left: 4px;
+            /* Match chip horizontal padding so Prep lines up with site/Cook icons when wrapped. */
+            .pb-meta-times {{
+              padding-left: 12px;
+              padding-right: 12px;
             }}
             """
         )

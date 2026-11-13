@@ -134,7 +134,7 @@ class Settings:
         if "welcome_seen" in data:
             self.welcome_seen = bool(data.get("welcome_seen"))
         try:
-            self.window_width = max(360, min(10000, int(data.get("window_width", self.window_width))))
+            self.window_width = max(420, min(10000, int(data.get("window_width", self.window_width))))
         except (TypeError, ValueError):
             pass
         try:

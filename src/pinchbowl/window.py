@@ -74,7 +74,8 @@ class PinchBowlWindow(Adw.ApplicationWindow):
         self._nav_toggles: list[Gtk.Button] = []
 
         # Breakpoints remove the window's implicit minimum; set an explicit floor.
-        self.set_size_request(360, 480)
+        # ≥402 clears the ingredients column’s natural min inside AdwBreakpointBin.
+        self.set_size_request(420, 480)
 
         self.sidebar = Sidebar(tags_expanded=settings.sidebar_tags_expanded)
         self.sidebar.on_filter = self._on_filter
@@ -114,32 +115,38 @@ class PinchBowlWindow(Adw.ApplicationWindow):
         self.count_label.add_css_class("dim-label")
         self.count_label.add_css_class("caption")
         heading_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        heading_box.add_css_class("pb-list-heading")
         heading_box.set_hexpand(True)
         heading_box.set_valign(Gtk.Align.CENTER)
         heading_box.append(self.list_heading)
         heading_box.append(self.count_label)
 
         self.list_header = Adw.HeaderBar()
+        self.list_header.add_css_class("pb-list-header")
         self.list_header.set_show_end_title_buttons(False)
-        self.list_header.set_title_widget(heading_box)
+        # Empty title widget hides NavigationPage title; heading is pack_start
+        # so it left-aligns with the search field (see .pb-list-header CSS).
+        self.list_header.set_title_widget(Gtk.Box())
         self.list_header.pack_start(self._make_nav_toggle())
+        self.list_header.pack_start(heading_box)
         self.list_header.pack_end(add_btn)
         self.list_header.pack_end(self.sort_btn)
 
         search_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         search_bar.add_css_class("pb-search-bar")
-        search_bar.set_margin_start(10)
-        search_bar.set_margin_end(10)
-        search_bar.set_margin_bottom(8)
         search_bar.append(self.search)
 
         self.list = Gtk.ListBox()
         self.list.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self.list.set_activate_on_single_click(True)
         self.list.set_show_separators(False)
         self.list.add_css_class("pb-recipe-list")
         self.list.set_filter_func(self._row_matches_filter)
         self.list.set_sort_func(self._row_sort)
         self.list.connect("row-selected", self._on_row_selected)
+        # Re-clicking the selected row does not re-emit row-selected; activation
+        # covers back-from-detail then tapping the same recipe again.
+        self.list.connect("row-activated", self._on_row_activated)
 
         list_scroll = Gtk.ScrolledWindow()
         list_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -178,6 +185,8 @@ class PinchBowlWindow(Adw.ApplicationWindow):
         self.recipe_view.set_menu_model(menu)
 
         detail_header = Adw.HeaderBar()
+        # Recipe title is in the body; keep the header bar clear.
+        detail_header.set_title_widget(Gtk.Box())
         detail_header.pack_start(self._make_nav_toggle())
         detail_header.pack_end(self.recipe_view.menu_btn)
         detail_tv = Adw.ToolbarView()
@@ -320,7 +329,7 @@ class PinchBowlWindow(Adw.ApplicationWindow):
         self.shell_bin = Adw.BreakpointBin()
         self.shell_bin.set_hexpand(True)
         self.shell_bin.set_vexpand(True)
-        self.shell_bin.set_size_request(360, 400)
+        self.shell_bin.set_size_request(420, 400)
         self.shell_bin.set_child(self.multi_layout)
 
         self._shell_band = "wide"
@@ -746,12 +755,24 @@ class PinchBowlWindow(Adw.ApplicationWindow):
             return
         if not isinstance(row, RecipeRow):
             return
+        self._open_recipe_row(row)
+
+    def _on_row_activated(self, _list: Gtk.ListBox, row: Gtk.ListBoxRow) -> None:
+        if self._selecting or not isinstance(row, RecipeRow):
+            return
+        self._open_recipe_row(row)
+
+    def _open_recipe_row(self, row: RecipeRow) -> None:
         detail = self.recipe_view.recipe
         if (
             row.recipe_id == self._current_id
             and detail is not None
             and detail.id == row.recipe_id
         ):
+            # Same recipe already loaded (narrow: back to list, tap again).
+            if self._recipe_nav_collapsed():
+                self._set_show_recipe_content(True)
+                self._close_nav_overlay()
             return
         recipe = self.store.get(row.recipe_id)
         if recipe is None:

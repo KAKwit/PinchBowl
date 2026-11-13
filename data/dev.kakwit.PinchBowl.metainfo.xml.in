@@ -54,6 +54,70 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.0.51" date="2026-11-13">
+      <description>
+        <p>
+          In the narrow list view, tapping the same recipe again after Back
+          reopens its detail.
+        </p>
+      </description>
+    </release>
+    <release version="1.0.50" date="2026-11-13">
+      <description>
+        <p>
+          Scroll the recipe detail back to the top when selecting another
+          recipe.
+        </p>
+      </description>
+    </release>
+    <release version="1.0.49" date="2026-11-13">
+      <description>
+        <p>
+          Raise the minimum window width to 420px so it fits the recipe
+          detail’s natural minimum and avoids an Adwaita breakpoint warning.
+        </p>
+      </description>
+    </release>
+    <release version="1.0.48" date="2026-11-13">
+      <description>
+        <p>
+          Revert a broken ingredients-column width change that caused
+          negative layout allocations when resizing the window.
+        </p>
+      </description>
+    </release>
+    <release version="1.0.47" date="2026-11-13">
+      <description>
+        <p>
+          Fix an Adwaita warning when shrinking the window to its minimum
+          width by not pinning the ingredients column’s minimum size.
+        </p>
+      </description>
+    </release>
+    <release version="1.0.46" date="2026-11-13">
+      <description>
+        <p>
+          Keep Prep/Cook/Total aligned with the meta and action chips when
+          the recipe header wraps on narrow widths.
+        </p>
+      </description>
+    </release>
+    <release version="1.0.45" date="2026-11-13">
+      <description>
+        <p>
+          Align the recipe list heading with the search field and give it
+          a little more vertical spacing.
+        </p>
+      </description>
+    </release>
+    <release version="1.0.44" date="2026-11-13">
+      <description>
+        <p>
+          Hide the recipe title from the detail header bar (it already
+          appears in the body), and left-align the recipe list heading.
+        </p>
+      </description>
+    </release>
     <release version="1.0.43" date="2026-11-13">
       <description>
         <p>
@@ -264,7 +328,7 @@
     </release>
   </releases>
   <requires>
-    <display_length compare="ge">360</display_length>
+    <display_length compare="ge">420</display_length>
   </requires>
   <supports>
     <control>keyboard</control>

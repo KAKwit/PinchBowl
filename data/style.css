@@ -58,6 +58,22 @@
   background: @view_bg_color;
 }
 
+/* Match search inset (10px) and give the filter title a little vertical air. */
+.pb-list-pane .pb-list-header {
+  padding-left: 10px;
+  padding-right: 10px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.pb-list-heading {
+  margin: 2px 0;
+}
+
+.pb-search-bar {
+  margin: 0 10px 8px 10px;
+}
+
 .pb-list-toolbar {
   min-height: 42px;
   padding: 10px 12px 4px 14px;
