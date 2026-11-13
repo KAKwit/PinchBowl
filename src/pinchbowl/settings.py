@@ -9,14 +9,21 @@ from pinchbowl.paths import settings_path
 
 Listener = Callable[[], None]
 
+# Nav column — room for the 64px mark + “Pinch Bowl” / “mise en place”.
+# Detail stack breakpoints are independent of this range.
+NAV_MIN_SP = 240
+NAV_MAX_SP = 300
+
 DEFAULTS = {
     "color_scheme": "system",
     # Cook mode uses an explicit light/dark preference (kitchen-friendly default).
     "cook_color_scheme": "dark",
     "font_size": 15,
     "recipe_font": "default",
-    "nav_width": 220,
-    "list_width": 340,
+    # Sidebar widths in sp (Adw splits are not drag-resizable).
+    "nav_width": 260,
+    # Matches Newsflash article-list sidebar range (360–600sp).
+    "list_width": 480,
     "list_sort": "title",
     "list_sort_ascending": True,
     "grocery_sort": "created",
@@ -34,7 +41,8 @@ SORT_KEYS = frozenset({"created", "title", "time"})
 GROCERY_SORT_KEYS = frozenset({"created", "text"})
 
 WINDOW_DEFAULTS = {
-    "window_width": 1280,
+    # Comfortable for nav + list + 400px ingredients beside directions.
+    "window_width": 1480,
     "window_height": 800,
     "window_maximized": False,
 }
@@ -89,11 +97,17 @@ class Settings:
         if font_id in FONT_BY_ID:
             self.recipe_font = font_id
         try:
-            self.nav_width = max(160, min(420, int(data.get("nav_width", self.nav_width))))
+            self.nav_width = max(
+                NAV_MIN_SP, min(NAV_MAX_SP, int(data.get("nav_width", self.nav_width)))
+            )
         except (TypeError, ValueError):
             pass
         try:
-            self.list_width = max(220, min(560, int(data.get("list_width", self.list_width))))
+            raw_list = int(data.get("list_width", self.list_width))
+            # Old default was 400 (max 520); prefer Newsflash-like width.
+            if raw_list == 400:
+                raw_list = 480
+            self.list_width = max(360, min(600, raw_list))
         except (TypeError, ValueError):
             pass
         sort_key = str(data.get("list_sort", self.list_sort))
@@ -120,11 +134,11 @@ class Settings:
         if "welcome_seen" in data:
             self.welcome_seen = bool(data.get("welcome_seen"))
         try:
-            self.window_width = max(800, min(10000, int(data.get("window_width", self.window_width))))
+            self.window_width = max(360, min(10000, int(data.get("window_width", self.window_width))))
         except (TypeError, ValueError):
             pass
         try:
-            self.window_height = max(500, min(10000, int(data.get("window_height", self.window_height))))
+            self.window_height = max(480, min(10000, int(data.get("window_height", self.window_height))))
         except (TypeError, ValueError):
             pass
         if "window_maximized" in data:

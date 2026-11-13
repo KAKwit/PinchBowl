@@ -8,7 +8,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 gi.require_version("GdkPixbuf", "2.0")
 
-from gi.repository import GdkPixbuf, GLib, Gtk
+from gi.repository import GdkPixbuf, GLib, Gtk, Pango
 
 from pinchbowl.paths import APP_NAME, APP_TAGLINE, data_dir
 
@@ -53,6 +53,9 @@ class Sidebar(Gtk.Box):
         self.set_hexpand(True)
         self.set_vexpand(True)
         self.on_filter: Callable[[str, str | None], None] | None = None
+        # Fired on activate (incl. re-clicking the current row) so the shell
+        # can dismiss a nav overlay even when selection does not change.
+        self.on_destination_chosen: Callable[[], None] | None = None
         self.on_tags_expanded_changed: Callable[[bool], None] | None = None
         self._tags_expanded = tags_expanded
         self._tag_rows: list[_NavRow] = []
@@ -63,14 +66,26 @@ class Sidebar(Gtk.Box):
         brand.add_css_class("pb-sidebar-brand")
         brand.set_halign(Gtk.Align.START)
         brand.set_valign(Gtk.Align.CENTER)
+        brand.set_hexpand(True)
+        # OverlaySplitView animates sidebar width; keep mins tiny so GTK does
+        # not warn when measuring mid-reveal (~89px) below natural size.
+        brand.set_overflow(Gtk.Overflow.HIDDEN)
 
         title = Gtk.Label(label=APP_NAME, xalign=0)
         title.add_css_class("pb-sidebar-title")
+        title.set_ellipsize(Pango.EllipsizeMode.END)
+        title.set_width_chars(1)
+        title.set_hexpand(True)
         tagline = Gtk.Label(label=APP_TAGLINE, xalign=0)
         tagline.add_css_class("pb-sidebar-tagline")
+        tagline.set_ellipsize(Pango.EllipsizeMode.END)
+        tagline.set_width_chars(1)
+        tagline.set_hexpand(True)
 
         text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         text.set_valign(Gtk.Align.CENTER)
+        text.set_hexpand(True)
+        text.set_overflow(Gtk.Overflow.HIDDEN)
         text.append(title)
         text.append(tagline)
 
@@ -83,6 +98,9 @@ class Sidebar(Gtk.Box):
 
         self.list = Gtk.ListBox()
         self.list.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        # Single-click activate so re-selecting the current filter still
+        # notifies the shell (overlay dismiss).
+        self.list.set_activate_on_single_click(True)
         self.list.add_css_class("navigation-sidebar")
         self.list.add_css_class("pb-nav-list")
         self.list.connect("row-selected", self._on_selected)
@@ -123,6 +141,9 @@ class Sidebar(Gtk.Box):
             image.add_css_class("accent")
             text = Gtk.Label(label=label, xalign=0)
             text.set_hexpand(True)
+            text.set_ellipsize(Pango.EllipsizeMode.END)
+            text.set_width_chars(1)
+            box.set_overflow(Gtk.Overflow.HIDDEN)
             box.append(image)
             box.append(text)
             row.set_child(box)
@@ -214,6 +235,9 @@ class Sidebar(Gtk.Box):
     def _on_activated(self, _list: Gtk.ListBox, row: Gtk.ListBoxRow) -> None:
         if row is self._tags_header_row:
             self._toggle_tags()
+            return
+        if isinstance(row, _NavRow) and self.on_destination_chosen is not None:
+            self.on_destination_chosen()
 
     def _on_selected(self, _list: Gtk.ListBox, row: Gtk.ListBoxRow | None) -> None:
         if row is None or not row.get_selectable():

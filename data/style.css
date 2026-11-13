@@ -8,15 +8,18 @@
 .pb-sidebar {
   background: @sidebar_bg_color;
   color: @sidebar_fg_color;
+  min-width: 0;
 }
 
 .pb-sidebar-header {
   min-height: 52px;
+  min-width: 0;
   padding: 12px 16px 10px 16px;
 }
 
 .pb-sidebar-brand {
   min-height: 64px;
+  min-width: 0;
 }
 
 .pb-sidebar-title {
@@ -73,6 +76,13 @@
   padding: 0;
   border-radius: 10px;
   background: transparent;
+  min-width: 0;
+}
+
+.pb-recipe-row > box,
+.pb-row-meta,
+.pb-row-meta-part {
+  min-width: 0;
 }
 
 .pb-recipe-list > row.pb-recipe-row:hover {
@@ -120,22 +130,56 @@
   padding: 6px 10px 4px;
 }
 
+/* Allow the detail pane to shrink below the side-by-side natural width so
+   ingredients can relocate under directions (ScrolledWindow h=NEVER). */
+.pb-recipe-body,
+.pb-main-col,
+.pb-side-col,
+.pb-ingredients,
+.pb-instructions,
+.pb-ingredient-line,
+.pb-dir-step,
+.pb-hero-stack,
+.pb-title-row {
+  min-width: 0;
+}
+
 .pb-main-col {
   padding-right: 20px;
 }
 
+.pb-main-col-stacked {
+  padding-right: 0;
+  padding-bottom: 16px;
+}
+
+.pb-recipe-body.pb-body-stacked .pb-side-col {
+  margin-left: 0;
+}
+
+.pb-hero-aspect {
+  min-width: 0;
+  min-height: 0;
+}
+
 .pb-hero-stack {
-  border-radius: 14px;
+  border-radius: 14px 14px 0 0;
+  min-width: 0;
+  min-height: 0;
 }
 
 .pb-hero {
-  border-radius: 14px;
+  border-radius: 14px 14px 0 0;
   background: transparent;
+  min-width: 0;
+  min-height: 0;
 }
 
 .pb-hero-placeholder {
-  border-radius: 14px;
+  border-radius: 14px 14px 0 0;
   background: alpha(@view_fg_color, 0.06);
+  min-width: 0;
+  min-height: 0;
 }
 
 .pb-image-stage {
@@ -146,13 +190,15 @@
 .pb-side-col {
   background: alpha(@view_fg_color, 0.04);
   border-radius: 14px;
-  padding: 16px 18px 20px 18px;
+  padding: 0;
   margin-left: 4px;
+  min-width: 0;
 }
 
-.pb-paned > separator {
-  background: transparent;
-  min-width: 1px;
+/* Padding under the full-bleed hero so ingredients stay inset. */
+.pb-side-body {
+  padding: 12px 18px 20px 18px;
+  min-width: 0;
 }
 
 /* Cook mode — dynamic type lives on CookView's CSS provider. */

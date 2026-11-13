@@ -8,16 +8,13 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 gi.require_version("Gdk", "4.0")
-gi.require_version("GdkPixbuf", "2.0")
-
-from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango
 
 from pinchbowl.adjust import adjust_ingredients, scale_yield_text
 from pinchbowl.ai_paste import AI_SOURCE_LABEL, is_ai_recipe
 from pinchbowl.directions import parse_instructions
 from pinchbowl.duration import format_duration_text
 from pinchbowl.fonts import css_font_family
-from pinchbowl.images import cover_crop_pixbuf
 from pinchbowl.ingredients import clean_ingredient_line, ingredient_line_markup
 from pinchbowl.models import Recipe
 from pinchbowl.portals import copy_image, copy_text, read_image_png
@@ -26,12 +23,30 @@ from pinchbowl.settings import Settings
 from pinchbowl.textutil import decode_entities
 from pinchbowl.urls import openable_url, source_display
 
-# Side column (hero + ingredients) as a fraction of the recipe body width.
-_SIDE_FRACTION = 1 / 3
-# Hero frame is always this aspect (width / height); images are cover-cropped to fit.
-_HERO_ASPECT = 1.0  # square
-# Horizontal padding inside .pb-side-col (18px each side).
-_SIDE_PAD_X = 36
+# Side column (hero + ingredients) — fixed when beside directions; never
+# shrinks. Stacks below when the *detail pane* is under 1100sp (not the
+# window — nav/list would otherwise leave directions crushed).
+_SIDE_WIDTH = 400
+_SIDE_STACKED_MAX = 560
+_DETAIL_STACK_SP = 1100
+# Small hysteresis so a one-frame shell width jump does not flicker, without
+# requiring an ultra-wide pane to restore side-by-side.
+_DETAIL_UNSTACK_SP = 1200
+
+
+def _wrapping_label(label: Gtk.Label) -> Gtk.Label:
+    """Wrap to allocation without inflating ScrolledWindow min-width.
+
+    With hscrollbar-policy NEVER, a large label min-width pins the detail
+    pane open and stacking never runs. width_chars(1) keeps the minimum
+    tiny; the parent allocation decides the real wrap width.
+    """
+    label.set_wrap(True)
+    label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+    label.set_hexpand(True)
+    label.set_halign(Gtk.Align.FILL)
+    label.set_width_chars(1)
+    return label
 
 
 def _meta_icon_label(
@@ -184,28 +199,18 @@ class RecipeView(Gtk.Box):
         self._source_actions.add_action(share_a)
         self.insert_action_group("source", self._source_actions)
         self._hero_path: Path | None = None
-        self._hero_pixbuf: GdkPixbuf.Pixbuf | None = None
         self._font_css = Gtk.CssProvider()
         self._adjust_factor = 1.0
         self._adjust_units = "original"
         self._yield_label: Gtk.Label | None = None
+        self._narrow_detail = False
         self.add_css_class("pb-recipe-view")
         self.set_hexpand(True)
         self.set_vexpand(True)
 
-        chrome = Gtk.WindowHandle()
-        chrome.add_css_class("window-chrome")
-        bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        drag = Gtk.Box()
-        drag.set_hexpand(True)
-        bar.append(drag)
-
+        # Packed into the detail HeaderBar by the window.
         self.menu_btn = Gtk.MenuButton(icon_name="open-menu-symbolic")
         self.menu_btn.add_css_class("flat")
-        bar.append(self.menu_btn)
-        bar.append(Gtk.WindowControls(side=Gtk.PackType.END))
-        chrome.set_child(bar)
-        self.append(chrome)
 
         empty = Adw.StatusPage(
             icon_name="emblem-documents-symbolic",
@@ -219,12 +224,17 @@ class RecipeView(Gtk.Box):
         self.stack = Gtk.Stack()
         self.stack.set_vexpand(True)
         self.stack.set_hexpand(True)
+        # Visible page only — empty StatusPage must not pin min width.
+        self.stack.set_hhomogeneous(False)
+        self.stack.set_vhomogeneous(False)
         self.stack.add_named(empty, "empty")
 
         self.body_scroll = Gtk.ScrolledWindow()
         self.body_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self.body_scroll.set_vexpand(True)
         self.body_scroll.set_hexpand(True)
+        self.body_scroll.set_propagate_natural_width(False)
+        self.body_scroll.set_propagate_natural_height(False)
 
         self.body = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         self.body.add_css_class("pb-recipe-body")
@@ -233,28 +243,19 @@ class RecipeView(Gtk.Box):
         self.body.set_margin_top(12)
         self.body.set_margin_bottom(28)
         self.body.set_hexpand(True)
-        # Allocation width (not requisition). Pane/window shrinks can miss
-        # body notify::width; the view itself tracks the paned end-child size.
-        self.connect("notify::width", self._on_viewport_width)
-        self.body_scroll.connect("notify::width", self._on_viewport_width)
-        self.body.connect("notify::width", self._on_viewport_width)
-        self._side_applied = 0
-        self._viewport_width = 0
 
         # Left: heading, description, directions
-        left = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        left.set_hexpand(True)
-        left.set_valign(Gtk.Align.START)
-        left.add_css_class("pb-main-col")
+        self.main_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.main_col.set_hexpand(True)
+        self.main_col.set_halign(Gtk.Align.FILL)
+        self.main_col.set_valign(Gtk.Align.START)
+        self.main_col.add_css_class("pb-main-col")
 
         self.title_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         self.title_row.add_css_class("pb-title-row")
         self.title = Gtk.Label(xalign=0)
         self.title.add_css_class("pb-recipe-title")
-        self.title.set_wrap(True)
-        self.title.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
-        self.title.set_hexpand(True)
-        self.title.set_halign(Gtk.Align.FILL)
+        _wrapping_label(self.title)
         self.title.set_valign(Gtk.Align.CENTER)
         self.favorite_btn = Gtk.Button()
         self.favorite_btn.add_css_class("flat")
@@ -281,13 +282,16 @@ class RecipeView(Gtk.Box):
         self.title_row.append(self.favorite_btn)
         self.title_row.append(self.rename_btn)
 
-        self.meta = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        self.meta = Adw.WrapBox()
         self.meta.add_css_class("pb-meta")
+        self.meta.set_child_spacing(16)
+        self.meta.set_line_spacing(8)
         self.meta.set_valign(Gtk.Align.CENTER)
 
-        self.actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        self.actions = Adw.WrapBox()
         self.actions.add_css_class("pb-actions")
-        # Widget margin — CSS margin on boxes is unreliable here.
+        self.actions.set_child_spacing(4)
+        self.actions.set_line_spacing(4)
         self.actions.set_margin_top(10)
         self.cook_btn = _meta_chip(
             "emoji-food-symbolic",
@@ -315,8 +319,8 @@ class RecipeView(Gtk.Box):
         self.actions.append(self.groceries_btn)
 
         self.description = Gtk.Label(xalign=0)
-        self.description.set_wrap(True)
         self.description.add_css_class("pb-description")
+        _wrapping_label(self.description)
 
         self.preamble_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         self.preamble_sep.add_css_class("pb-preamble-sep")
@@ -327,17 +331,21 @@ class RecipeView(Gtk.Box):
         self.instructions_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.instructions_box.add_css_class("pb-instructions")
 
-        left.append(self.title_row)
-        left.append(self.meta)
-        left.append(self.actions)
-        left.append(self.description)
-        left.append(self.preamble_sep)
-        left.append(self.instr_heading)
-        left.append(self.instructions_box)
+        self.main_col.append(self.title_row)
+        self.main_col.append(self.meta)
+        self.main_col.append(self.actions)
+        self.main_col.append(self.description)
+        self.main_col.append(self.preamble_sep)
+        self.main_col.append(self.instr_heading)
+        self.main_col.append(self.instructions_box)
 
-        # Right: hero, then ingredients. Adw.Clamp + size_request pin the column
-        # width; labels/hero are capped so they cannot inflate the clamp.
-        self.side_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        # Right: hero, then ingredients. Fixed 400 when beside directions;
+        # detail BreakpointBin stacks this column below under 1100sp.
+        # Label mins stay tiny so ScrolledWindow(NEVER) can shrink.
+        # Hero sits outside the padded ingredients block so it always spans
+        # the full card width (Clamp + Picture natural size otherwise leave
+        # a tiny centered square for small image files).
+        self.side_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.side_col.add_css_class("pb-side-col")
         self.side_col.set_hexpand(True)
         self.side_col.set_halign(Gtk.Align.FILL)
@@ -346,6 +354,10 @@ class RecipeView(Gtk.Box):
         self.side_col.set_overflow(Gtk.Overflow.HIDDEN)
 
         self.side_clamp = Adw.Clamp()
+        self.side_clamp.set_maximum_size(_SIDE_WIDTH)
+        self.side_clamp.set_tightening_threshold(_SIDE_WIDTH)
+        # Pin width when beside directions; cleared while stacked below.
+        self.side_clamp.set_size_request(_SIDE_WIDTH, -1)
         self.side_clamp.set_child(self.side_col)
         self.side_clamp.set_hexpand(False)
         self.side_clamp.set_halign(Gtk.Align.END)
@@ -354,11 +366,18 @@ class RecipeView(Gtk.Box):
         self.hero_stack = Gtk.Stack()
         self.hero_stack.add_css_class("pb-hero-stack")
         self.hero_stack.set_halign(Gtk.Align.FILL)
+        self.hero_stack.set_valign(Gtk.Align.FILL)
+        self.hero_stack.set_hexpand(True)
+        self.hero_stack.set_vexpand(True)
 
         self.hero = Gtk.Picture()
         self.hero.set_content_fit(Gtk.ContentFit.COVER)
         self.hero.set_can_shrink(True)
         self.hero.add_css_class("pb-hero")
+        self.hero.set_halign(Gtk.Align.FILL)
+        self.hero.set_valign(Gtk.Align.FILL)
+        self.hero.set_hexpand(True)
+        self.hero.set_vexpand(True)
         self.hero.set_cursor(Gdk.Cursor.new_from_name("pointer"))
         click = Gtk.GestureClick()
         click.connect("released", self._on_hero_clicked)
@@ -394,22 +413,54 @@ class RecipeView(Gtk.Box):
         self.hero_stack.add_named(self.hero_placeholder, "placeholder")
         self.hero_stack.set_visible_child_name("placeholder")
 
+        # Plain box (not AspectFrame): Picture COVER fills the allocation, so
+        # even if height lags a frame the image still spans the card width.
+        # AspectFrame letterboxed a square inside a wider card instead.
+        self.hero_bin = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.hero_bin.add_css_class("pb-hero-aspect")
+        self.hero_bin.set_overflow(Gtk.Overflow.HIDDEN)
+        self.hero_bin.set_hexpand(True)
+        self.hero_bin.set_halign(Gtk.Align.FILL)
+        self.hero_bin.set_size_request(-1, _SIDE_WIDTH)
+        # Sync square height from this bin's allocated width (same as the card).
+        self.hero_bin.connect("notify::width", self._sync_hero_square)
+        self.hero_bin.append(self.hero_stack)
+
         self.ing_heading = Gtk.Label(label="Ingredients", xalign=0)
         self.ing_heading.add_css_class("pb-recipe-heading")
+        _wrapping_label(self.ing_heading)
         self.ingredients_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.ingredients_box.add_css_class("pb-ingredients")
-        self.ingredients_box.set_hexpand(False)
+        self.ingredients_box.set_hexpand(True)
         self.ingredients_box.set_halign(Gtk.Align.FILL)
 
-        self.side_col.append(self.hero_stack)
-        self.side_col.append(self.ing_heading)
-        self.side_col.append(self.ingredients_box)
+        ing_block = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        ing_block.add_css_class("pb-side-body")
+        ing_block.set_hexpand(True)
+        ing_block.append(self.ing_heading)
+        ing_block.append(self.ingredients_box)
 
-        self.body.append(left)
+        self.side_col.append(self.hero_bin)
+        self.side_col.append(ing_block)
+
+        self.body.append(self.main_col)
         self.body.append(self.side_clamp)
 
         self.body_scroll.set_child(self.body)
-        self.stack.add_named(self.body_scroll, "recipe")
+        # BreakpointBin wraps scroll so a tall stacked body scrolls instead of
+        # fighting the bin height. 1100sp is the *detail* width, not window.
+        self._layout_bin = Adw.BreakpointBin()
+        self._layout_bin.set_hexpand(True)
+        self._layout_bin.set_vexpand(True)
+        self._layout_bin.set_size_request(200, 200)
+        self._layout_bin.set_child(self.body_scroll)
+        self._narrow_bp = Adw.Breakpoint.new(
+            Adw.BreakpointCondition.parse(f"max-width: {_DETAIL_STACK_SP}sp")
+        )
+        self._narrow_bp.connect("apply", self._on_detail_narrow_apply)
+        self._narrow_bp.connect("unapply", self._on_detail_narrow_unapply)
+        self._layout_bin.add_breakpoint(self._narrow_bp)
+        self.stack.add_named(self._layout_bin, "recipe")
         self.append(self.stack)
         self.show_empty()
         self.apply_appearance()
@@ -420,7 +471,6 @@ class RecipeView(Gtk.Box):
     def show_empty(self) -> None:
         self.recipe = None
         self._hero_path = None
-        self._hero_pixbuf = None
         self._reset_adjust_state()
         self.stack.set_visible_child_name("empty")
 
@@ -449,8 +499,6 @@ class RecipeView(Gtk.Box):
         self._set_adjust_chip_active(
             abs(self._adjust_factor - 1.0) > 1e-9 or self._adjust_units != "original"
         )
-        self._sync_side_widths()
-        GLib.idle_add(self._sync_side_widths)
 
     def _set_adjust_chip_active(self, active: bool) -> None:
         if active:
@@ -472,8 +520,7 @@ class RecipeView(Gtk.Box):
         self.title.set_text(decode_entities(recipe.title))
         self._set_favorite_ui(recipe.favorite)
 
-        while (child := self.meta.get_first_child()) is not None:
-            self.meta.remove(child)
+        self.meta.remove_all()
         self._yield_label = None
 
         # Site + tags share Cook/Adjust spacing so those two chips sit close.
@@ -529,7 +576,7 @@ class RecipeView(Gtk.Box):
             self.meta.append(yield_box)
 
         times = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
-        times.set_halign(Gtk.Align.END)
+        times.set_halign(Gtk.Align.START)
         times.set_valign(Gtk.Align.CENTER)
         for label, value in (
             ("Prep", recipe.prep_time),
@@ -540,9 +587,6 @@ class RecipeView(Gtk.Box):
             if shown:
                 times.append(_time_part(label, shown))
         if times.get_first_child() is not None:
-            spacer = Gtk.Box()
-            spacer.set_hexpand(True)
-            self.meta.append(spacer)
             self.meta.append(times)
 
         self.meta.set_visible(self.meta.get_first_child() is not None)
@@ -556,10 +600,6 @@ class RecipeView(Gtk.Box):
         self._render_ingredients(recipe.ingredients)
         self._set_hero(recipe.image_path)
         self.stack.set_visible_child_name("recipe")
-        # Constrain before the next frame so long ingredient lines cannot
-        # inflate the side column's minimum width past the clamp.
-        self._sync_side_widths()
-        GLib.idle_add(self._sync_side_widths)
 
     def _render_directions(self, text: str) -> None:
         while (child := self.instructions_box.get_first_child()) is not None:
@@ -572,16 +612,12 @@ class RecipeView(Gtk.Box):
             if kind == "heading":
                 heading = Gtk.Label(label=item[1], xalign=0)
                 heading.add_css_class("pb-recipe-heading")
-                heading.set_wrap(True)
-                heading.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+                _wrapping_label(heading)
                 self.instructions_box.append(heading)
                 continue
             if kind == "plain":
                 step = Gtk.Label(xalign=0, label=item[1])
-                step.set_wrap(True)
-                step.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
-                step.set_hexpand(True)
-                step.set_halign(Gtk.Align.FILL)
+                _wrapping_label(step)
                 row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
                 row.add_css_class("pb-dir-step")
                 row.set_hexpand(True)
@@ -604,10 +640,7 @@ class RecipeView(Gtk.Box):
             num.set_valign(Gtk.Align.START)
             num.set_hexpand(False)
             body = Gtk.Label(xalign=0, label=body_text)
-            body.set_wrap(True)
-            body.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
-            body.set_hexpand(True)
-            body.set_halign(Gtk.Align.FILL)
+            _wrapping_label(body)
             body.set_valign(Gtk.Align.START)
             row.append(num)
             row.append(body)
@@ -617,7 +650,6 @@ class RecipeView(Gtk.Box):
     def _render_ingredients(self, text: str) -> None:
         while (child := self.ingredients_box.get_first_child()) is not None:
             self.ingredients_box.remove(child)
-        inner = self._inner_width(self._side_width()) if self._side_width() > 0 else 0
         adjusted = adjust_ingredients(text, self._adjust_factor, self._adjust_units)
         for raw in (adjusted or "").splitlines():
             cleaned = clean_ingredient_line(raw)
@@ -625,25 +657,17 @@ class RecipeView(Gtk.Box):
             if markup is None:
                 continue
             label = Gtk.Label(xalign=0)
-            label.set_wrap(True)
-            label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
             label.set_use_markup(True)
             label.set_markup(markup)
-            label.set_hexpand(True)
-            label.set_halign(Gtk.Align.FILL)
-            self._limit_label_width(label, max(40, inner - 16) if inner else 0)
+            _wrapping_label(label)
             if cleaned.startswith("#"):
                 label.add_css_class("pb-recipe-heading")
-                if inner > 0:
-                    label.set_size_request(inner, -1)
                 self.ingredients_box.append(label)
                 continue
             row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
             row.add_css_class("pb-ingredient-line")
-            row.set_hexpand(False)
+            row.set_hexpand(True)
             row.set_halign(Gtk.Align.FILL)
-            if inner > 0:
-                row.set_size_request(inner, -1)
             row.append(label)
             self._make_checkable(row)
             self.ingredients_box.append(row)
@@ -698,136 +722,92 @@ class RecipeView(Gtk.Box):
             return
         self.on_toggle_favorite(not self.recipe.favorite)
 
-    def _side_width(self) -> int:
-        # Prefer the recipe view allocation — that is what the paned actually
-        # sized. Fall back to the scrolled body during the first map.
-        width = self.get_width()
-        if width <= 100:
-            width = self.body_scroll.get_width()
-        if width <= 100:
-            width = self.body.get_width()
-        if width <= 100:
-            return 0
-        # Body margins are outside the fractioned content area.
-        margins = self.body.get_margin_start() + self.body.get_margin_end()
-        content = max(0, width - margins)
-        return max(180, int(content * _SIDE_FRACTION))
+    def _on_detail_narrow_apply(self, *_args: object) -> None:
+        self._set_ingredients_stacked(True)
+        # Raise the leave threshold slightly so a small shell width jump
+        # does not flicker; unstack once the pane is past _DETAIL_UNSTACK_SP.
+        self._narrow_bp.set_condition(
+            Adw.BreakpointCondition.parse(f"max-width: {_DETAIL_UNSTACK_SP}sp")
+        )
 
-    def _inner_width(self, side: int) -> int:
-        return max(120, side - _SIDE_PAD_X)
+    def _on_detail_narrow_unapply(self, *_args: object) -> None:
+        self._set_ingredients_stacked(False)
+        self._narrow_bp.set_condition(
+            Adw.BreakpointCondition.parse(f"max-width: {_DETAIL_STACK_SP}sp")
+        )
 
-    def _hero_size(self, side: int) -> tuple[int, int]:
-        inner = self._inner_width(side)
-        height = max(1, int(round(inner / _HERO_ASPECT)))
-        return inner, height
-
-    def _limit_label_width(self, label: Gtk.Label, width_px: int) -> None:
-        """Keep wrapping labels from reporting a huge natural width."""
-        if width_px <= 0:
+    def _set_ingredients_stacked(self, stacked: bool) -> None:
+        """Place hero + ingredients below directions (detail pane ≤1100sp)."""
+        if stacked == self._narrow_detail:
             return
-        # ~7px/char is a safe estimate for the recipe UI font sizes we use.
-        label.set_max_width_chars(max(8, width_px // 7))
-
-    def _constrain_side_labels(self, widget: Gtk.Widget, width_px: int) -> None:
-        if isinstance(widget, Gtk.Label):
-            self._limit_label_width(widget, width_px)
+        self._narrow_detail = stacked
+        if stacked:
+            # Directions first, hero + ingredients below — never above.
+            self.body.set_orientation(Gtk.Orientation.VERTICAL)
+            self.body.reorder_child_after(self.side_clamp, self.main_col)
+            self.body.add_css_class("pb-body-stacked")
+            self.side_clamp.set_halign(Gtk.Align.FILL)
+            self.side_clamp.set_hexpand(True)
+            # Drop the 400px pin so the stacked body can shrink with the pane.
+            self.side_clamp.set_size_request(-1, -1)
+            self.side_clamp.set_maximum_size(_SIDE_STACKED_MAX)
+            self.side_clamp.set_tightening_threshold(480)
+            self.main_col.remove_css_class("pb-main-col")
+            self.main_col.add_css_class("pb-main-col-stacked")
+            self._sync_hero_square()
+            GLib.idle_add(self._sync_hero_square_idle)
             return
-        child = widget.get_first_child() if hasattr(widget, "get_first_child") else None
-        while child is not None:
-            self._constrain_side_labels(child, max(40, width_px - 16))
-            child = child.get_next_sibling()
+        self.body.set_orientation(Gtk.Orientation.HORIZONTAL)
+        self.body.reorder_child_after(self.side_clamp, self.main_col)
+        self.body.remove_css_class("pb-body-stacked")
+        self.side_clamp.set_halign(Gtk.Align.END)
+        self.side_clamp.set_hexpand(False)
+        self.side_clamp.set_size_request(_SIDE_WIDTH, -1)
+        self.side_clamp.set_maximum_size(_SIDE_WIDTH)
+        self.side_clamp.set_tightening_threshold(_SIDE_WIDTH)
+        self.main_col.remove_css_class("pb-main-col-stacked")
+        self.main_col.add_css_class("pb-main-col")
+        # Side-by-side width is always _SIDE_WIDTH; do not read get_width()
+        # here — it still reports the stacked allocation for a frame and
+        # would re-pin height to ~560 (tall portrait in a 400px column).
+        self.hero_bin.set_size_request(-1, _SIDE_WIDTH)
+        GLib.idle_add(self._sync_hero_square_idle)
 
-    def _on_viewport_width(self, *_args: object) -> None:
-        width = self.get_width() or self.body_scroll.get_width() or self.body.get_width()
-        if width == self._viewport_width:
+    def _sync_hero_square_idle(self) -> bool:
+        self._sync_hero_square()
+        return GLib.SOURCE_REMOVE
+
+    def _sync_hero_square(self, *_args: object) -> None:
+        """Match hero height to the ingredients card width (square, full bleed).
+
+        Width is never size-requested — that made the image drive the card.
+        Beside directions the card is always _SIDE_WIDTH; ignore allocated
+        width so a stale stacked size cannot leave a tall portrait hero.
+        """
+        if not self._narrow_detail:
+            width = _SIDE_WIDTH
+        else:
+            width = self.hero_bin.get_width()
+            if width < 2:
+                width = self.side_col.get_width()
+            if width < 2:
+                return
+        current = self.hero_bin.get_size_request()
+        if current.width == -1 and current.height == width:
             return
-        self._viewport_width = width
-        self._sync_side_widths()
-
-    def sync_layout(self) -> bool:
-        """Recompute side column after outer paned positions settle."""
-        self._side_applied = 0
-        self._viewport_width = 0
-        self._sync_side_widths()
-        return False
-
-    def _sync_side_widths(self, *_args: object) -> bool:
-        side = self._side_width()
-        if side <= 0:
-            return False
-        inner = self._inner_width(side)
-        side_changed = side != self._side_applied
-        self._side_applied = side
-
-        # Shrink child requisitions first so a previous wide size_request cannot
-        # keep the column (and HSCROLL NEVER viewport) pinned open.
-        self._layout_hero(side)
-        self.ingredients_box.set_size_request(inner, -1)
-        self.ingredients_box.set_hexpand(False)
-        self.ing_heading.set_size_request(inner, -1)
-        self._limit_label_width(self.ing_heading, inner)
-        child = self.ingredients_box.get_first_child()
-        while child is not None:
-            child.set_size_request(inner, -1)
-            child.set_hexpand(False)
-            self._constrain_side_labels(child, max(40, inner - 16))
-            child = child.get_next_sibling()
-        self.ingredients_box.queue_resize()
-
-        if side_changed:
-            self.side_clamp.set_maximum_size(side)
-            self.side_clamp.set_tightening_threshold(side)
-            self.side_clamp.set_size_request(side, -1)
-            self.side_col.set_size_request(side, -1)
-            self.side_clamp.queue_resize()
-        return False
+        self.hero_bin.set_size_request(-1, width)
 
     def _set_hero(self, path: str) -> None:
         self._hero_path = None
-        self._hero_pixbuf = None
-        if path and Path(path).is_file():
-            try:
-                pixbuf = GdkPixbuf.Pixbuf.new_from_file(path)
-                self._hero_path = Path(path)
-                self._hero_pixbuf = pixbuf
-            except Exception:
-                pass
-        self._layout_hero(self._side_width())
-
-    def _layout_hero(self, side: int) -> None:
-        if side <= 0:
-            return
-        tw, th = self._hero_size(side)
-        if self._hero_pixbuf is not None:
-            pixbuf = self._hero_pixbuf
-            if pixbuf.get_width() <= 0 or pixbuf.get_height() <= 0:
-                self._show_placeholder(side)
-                return
-            cropped = cover_crop_pixbuf(
-                pixbuf, tw, th, bilinear=GdkPixbuf.InterpType.BILINEAR
-            )
-            if cropped is None:
-                self._show_placeholder(side)
-                return
-            self.hero.set_paintable(Gdk.Texture.new_for_pixbuf(cropped))
-            self.hero.set_size_request(tw, th)
-            self.hero.set_hexpand(False)
-            self.hero_stack.set_size_request(tw, th)
-            self.hero_stack.set_hexpand(False)
-            self.hero_stack.set_halign(Gtk.Align.FILL)
-            self.hero_stack.set_visible_child_name("image")
-            return
-        self._show_placeholder(side)
-
-    def _show_placeholder(self, side: int) -> None:
-        self._hero_path = None
         self.hero.set_paintable(None)
-        tw, th = self._hero_size(side)
-        self.hero_placeholder.set_size_request(tw, th)
-        self.hero_stack.set_size_request(tw, th)
-        self.hero_stack.set_hexpand(False)
-        self.hero_stack.set_halign(Gtk.Align.FILL)
+        if path and Path(path).is_file():
+            self._hero_path = Path(path)
+            self.hero.set_filename(str(self._hero_path))
+            self.hero_stack.set_visible_child_name("image")
+            self._sync_hero_square()
+            return
         self.hero_stack.set_visible_child_name("placeholder")
+        self._sync_hero_square()
 
     def _show_ai_prompt(self) -> None:
         recipe = self.recipe
@@ -1166,4 +1146,3 @@ class RecipeView(Gtk.Box):
                 self._font_css,
                 Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 2,
             )
-        self._sync_side_widths()

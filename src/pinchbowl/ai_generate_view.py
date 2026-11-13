@@ -35,41 +35,40 @@ class AiGenerateView(Gtk.Box):
         self._preview_timeout: int | None = None
         self._prompt_dirty = False
         self._syncing_prompt = False
-
-        chrome = Gtk.WindowHandle()
-        chrome.add_css_class("window-chrome")
-        bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        bar.add_css_class("pb-ai-generate-toolbar")
+        self._compact = False
 
         heading = Gtk.Label(label="AI Generate", xalign=0)
         heading.add_css_class("heading")
-        heading.set_hexpand(True)
-        bar.append(heading)
 
         self.menu_btn = Gtk.MenuButton(icon_name="open-menu-symbolic")
         self.menu_btn.add_css_class("flat")
-        bar.append(self.menu_btn)
-        bar.append(Gtk.WindowControls(side=Gtk.PackType.END))
-        chrome.set_child(bar)
-        self.append(chrome)
+
+        self._header = Adw.HeaderBar()
+        self._header.set_title_widget(heading)
+        self._header.pack_end(self.menu_btn)
 
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroll.set_vexpand(True)
         scroll.set_hexpand(True)
 
-        clamp = Adw.Clamp()
-        clamp.set_maximum_size(640)
-        clamp.set_tightening_threshold(400)
-        clamp.set_margin_start(24)
-        clamp.set_margin_end(24)
-        clamp.set_margin_top(12)
-        clamp.set_margin_bottom(28)
+        self._clamp = Adw.Clamp()
+        self._clamp.set_maximum_size(640)
+        self._clamp.set_tightening_threshold(400)
+        self._clamp.set_margin_start(24)
+        self._clamp.set_margin_end(24)
+        self._clamp.set_margin_top(12)
+        self._clamp.set_margin_bottom(28)
+        clamp = self._clamp
 
         column = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
         clamp.set_child(column)
         scroll.set_child(clamp)
-        self.append(scroll)
+
+        toolbar = Adw.ToolbarView()
+        toolbar.add_top_bar(self._header)
+        toolbar.set_content(scroll)
+        self.append(toolbar)
 
         intro = Gtk.Label(
             label=(
@@ -267,6 +266,19 @@ class AiGenerateView(Gtk.Box):
         self.add_btn.connect("clicked", self._on_add)
         footer.append(self.add_btn)
         column.append(footer)
+
+    def pack_nav_toggle(self, button: Gtk.Button) -> None:
+        self._header.pack_start(button)
+
+    def set_compact(self, compact: bool) -> None:
+        if compact == self._compact:
+            return
+        self._compact = compact
+        margin = 12 if compact else 24
+        bottom = 16 if compact else 28
+        self._clamp.set_margin_start(margin)
+        self._clamp.set_margin_end(margin)
+        self._clamp.set_margin_bottom(bottom)
 
     def set_menu_model(self, model: Gio.MenuModel) -> None:
         self.menu_btn.set_menu_model(model)

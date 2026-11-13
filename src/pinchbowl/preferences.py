@@ -276,9 +276,9 @@ class PreferencesDialog(Adw.PreferencesDialog):
         dialog = Adw.AlertDialog(
             heading="Restore defaults?",
             body=(
-                "Color scheme, recipe font, font size, sort order, window size, and panel "
-                "widths will reset to the Pinch Bowl defaults. Your recipes and tags are "
-                "not changed."
+                "Color scheme, recipe font, font size, sort order, window size, and "
+                "sidebar widths will reset to the Pinch Bowl defaults. Your recipes and "
+                "tags are not changed."
             ),
         )
         dialog.add_response("cancel", "Cancel")

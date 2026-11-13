@@ -54,6 +54,17 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.0.43" date="2026-11-13">
+      <description>
+        <p>
+          More adaptive layouts across window sizes: Newsflash-style shell
+          (nav overlay below 1000sp, mid-band detail-forward at 500–800sp,
+          phone stack at 500sp), ingredients that stack by recipe-pane width,
+          cook-mode ingredients overlay on narrow screens, a wider nav for
+          the brand header, and smoother sidebar reveal without layout flicker.
+        </p>
+      </description>
+    </release>
     <release version="1.0.25" date="2026-11-08">
       <description>
         <p>

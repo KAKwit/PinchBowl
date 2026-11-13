@@ -33,11 +33,15 @@ from pinchbowl.recipe_io import (
 from pinchbowl.recipe_row import RecipeRow
 from pinchbowl.recipe_view import RecipeView
 from pinchbowl.schema_recipe import extract_recipe_from_html
-from pinchbowl.settings import SORT_KEYS, Settings
+from pinchbowl.settings import NAV_MAX_SP, NAV_MIN_SP, SORT_KEYS, Settings
 from pinchbowl.sidebar import Sidebar
 from pinchbowl.store import Store
 from pinchbowl.urls import clean_url, openable_url
 from pinchbowl.welcome_dialog import WelcomeDialog
+
+# Recipe list column — Newsflash article-list range (sp).
+_LIST_MIN_SP = 360
+_LIST_MAX_SP = 600
 
 
 class PinchBowlWindow(Adw.ApplicationWindow):
@@ -53,8 +57,7 @@ class PinchBowlWindow(Adw.ApplicationWindow):
         self._search_ids: set[int] | None = None
         self._recent_ids: set[int] = set()
         self._current_id: int | None = None
-        self._pane_save = None
-        self._layout_sync = None
+        self._width_save = None
         self._ready = False
         self._selecting = False
         self._cook_active = False
@@ -68,11 +71,15 @@ class PinchBowlWindow(Adw.ApplicationWindow):
         self._mela_watch: MelaWatch | None = None
         self._welcome_dialog: WelcomeDialog | None = None
         self._welcome_scheduled = False
+        self._nav_toggles: list[Gtk.Button] = []
+
+        # Breakpoints remove the window's implicit minimum; set an explicit floor.
+        self.set_size_request(360, 480)
 
         self.sidebar = Sidebar(tags_expanded=settings.sidebar_tags_expanded)
         self.sidebar.on_filter = self._on_filter
+        self.sidebar.on_destination_chosen = self._close_nav_overlay
         self.sidebar.on_tags_expanded_changed = self._on_tags_expanded_changed
-        self.sidebar.set_size_request(160, -1)
 
         # Recipe list column
         self.search = Gtk.SearchEntry()
@@ -101,8 +108,6 @@ class PinchBowlWindow(Adw.ApplicationWindow):
         sort_menu.append_section(None, dir_section)
         self.sort_btn.set_menu_model(sort_menu)
 
-        list_toolbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        list_toolbar.add_css_class("pb-list-toolbar")
         self.list_heading = Gtk.Label(label="All", xalign=0)
         self.list_heading.add_css_class("heading")
         self.count_label = Gtk.Label(xalign=0)
@@ -110,11 +115,16 @@ class PinchBowlWindow(Adw.ApplicationWindow):
         self.count_label.add_css_class("caption")
         heading_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         heading_box.set_hexpand(True)
+        heading_box.set_valign(Gtk.Align.CENTER)
         heading_box.append(self.list_heading)
         heading_box.append(self.count_label)
-        list_toolbar.append(heading_box)
-        list_toolbar.append(self.sort_btn)
-        list_toolbar.append(add_btn)
+
+        self.list_header = Adw.HeaderBar()
+        self.list_header.set_show_end_title_buttons(False)
+        self.list_header.set_title_widget(heading_box)
+        self.list_header.pack_start(self._make_nav_toggle())
+        self.list_header.pack_end(add_btn)
+        self.list_header.pack_end(self.sort_btn)
 
         search_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         search_bar.add_css_class("pb-search-bar")
@@ -136,13 +146,11 @@ class PinchBowlWindow(Adw.ApplicationWindow):
         list_scroll.set_vexpand(True)
         list_scroll.set_child(self.list)
 
-        list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        list_box.add_css_class("pb-list-pane")
-        list_box.set_size_request(240, -1)
-        list_box.append(Gtk.WindowHandle(child=list_toolbar))
-        list_box.append(search_bar)
-        list_box.append(list_scroll)
-        self.list_box = list_box
+        list_tv = Adw.ToolbarView()
+        list_tv.add_css_class("pb-list-pane")
+        list_tv.add_top_bar(self.list_header)
+        list_tv.add_top_bar(search_bar)
+        list_tv.set_content(list_scroll)
 
         self.recipe_view = RecipeView(settings)
         self.recipe_view.on_cook = self._on_cook
@@ -169,56 +177,159 @@ class PinchBowlWindow(Adw.ApplicationWindow):
         menu.append("About Pinch Bowl", "win.about")
         self.recipe_view.set_menu_model(menu)
 
+        detail_header = Adw.HeaderBar()
+        detail_header.pack_start(self._make_nav_toggle())
+        detail_header.pack_end(self.recipe_view.menu_btn)
+        detail_tv = Adw.ToolbarView()
+        detail_tv.add_top_bar(detail_header)
+        detail_tv.set_content(self.recipe_view)
+
         self.groceries_view = GroceriesView(store, self.settings)
         self.groceries_view.set_menu_model(menu)
         self.groceries_view.on_clear_done = self._clear_grocery_done
         self.groceries_view.on_clear_all = self._clear_grocery_all
+        self.groceries_view.pack_nav_toggle(self._make_nav_toggle())
 
         self.ai_generate_view = AiGenerateView()
         self.ai_generate_view.set_menu_model(menu)
         self.ai_generate_view.on_add = self._add_ai_recipe
         self.ai_generate_view.on_toast = self._toast
+        self.ai_generate_view.pack_nav_toggle(self._make_nav_toggle())
 
-        self.list_paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
-        self.list_paned.add_css_class("pb-paned")
-        self.list_paned.set_wide_handle(False)
-        self.list_paned.set_resize_start_child(False)
-        self.list_paned.set_resize_end_child(True)
-        self.list_paned.set_shrink_start_child(False)
-        self.list_paned.set_shrink_end_child(True)
-        self.list_paned.set_start_child(list_box)
-        self.list_paned.set_end_child(self.recipe_view)
+        # Detail slot host: recipe detail, or groceries / AI destinations.
+        self.detail_host = Gtk.Stack()
+        self.detail_host.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+        self.detail_host.set_transition_duration(180)
+        self.detail_host.set_hhomogeneous(False)
+        self.detail_host.set_vhomogeneous(False)
+        self.detail_host.set_hexpand(True)
+        self.detail_host.set_vexpand(True)
+        self.detail_host.add_named(detail_tv, "recipes")
+        self.detail_host.add_named(self.groceries_view, "groceries")
+        self.detail_host.add_named(self.ai_generate_view, "ai_generate")
+        self.detail_host.connect("notify::visible-child", self._sync_list_chrome)
 
-        self.content_stack = Gtk.Stack()
-        self.content_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
-        self.content_stack.set_transition_duration(180)
-        self.content_stack.set_hexpand(True)
-        self.content_stack.set_vexpand(True)
-        self.content_stack.add_named(self.list_paned, "recipes")
-        self.content_stack.add_named(self.groceries_view, "groceries")
-        self.content_stack.add_named(self.ai_generate_view, "ai_generate")
+        # Newsflash-style MultiLayoutView: default (Overlay+Nav) and medium
+        # (detail-forward with nav|list behind). Slots: sidebar, list, detail.
+        self.multi_layout = Adw.MultiLayoutView()
+        self.multi_layout.set_hexpand(True)
+        self.multi_layout.set_vexpand(True)
 
-        self.outer_paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
-        self.outer_paned.add_css_class("pb-paned")
-        self.outer_paned.set_wide_handle(False)
-        self.outer_paned.set_resize_start_child(False)
-        self.outer_paned.set_resize_end_child(True)
-        self.outer_paned.set_shrink_start_child(False)
-        self.outer_paned.set_shrink_end_child(True)
-        self.outer_paned.set_start_child(self.sidebar)
-        self.outer_paned.set_end_child(self.content_stack)
-        self.outer_paned.set_hexpand(True)
-        self.outer_paned.set_vexpand(True)
+        self.default_outer = Adw.OverlaySplitView()
+        self.default_outer.set_min_sidebar_width(NAV_MIN_SP)
+        self.default_outer.set_max_sidebar_width(NAV_MAX_SP)
+        self.default_outer.set_sidebar_width_unit(Adw.LengthUnit.SP)
+        self.default_outer.set_hexpand(True)
+        self.default_outer.set_vexpand(True)
+        self.default_outer.connect("notify::collapsed", self._on_nav_collapsed_changed)
+        self.default_outer.connect("notify::show-sidebar", self._on_nav_collapsed_changed)
 
-        # Apply remembered divider positions before the first map so the
-        # window does not open at the children's natural widths and then jump.
-        self.outer_paned.set_position(settings.nav_width)
-        self.list_paned.set_position(settings.list_width)
+        self.default_inner = Adw.NavigationSplitView()
+        self.default_inner.set_min_sidebar_width(_LIST_MIN_SP)
+        self.default_inner.set_max_sidebar_width(_LIST_MAX_SP)
+        self.default_inner.set_sidebar_width_unit(Adw.LengthUnit.SP)
+        self.default_inner.connect("notify::collapsed", self._sync_list_chrome)
+        self.default_inner.connect("notify::show-content", self._sync_list_chrome)
 
-        self.outer_paned.connect("notify::position", self._on_pane_moved)
-        self.list_paned.connect("notify::position", self._on_pane_moved)
+        self.default_list_page = Adw.NavigationPage.new(
+            Adw.LayoutSlot.new("list"), "Recipes"
+        )
+        self.default_list_page.set_tag("list")
+        self.default_list_page.set_can_pop(False)
+        self.default_detail_page = Adw.NavigationPage.new(
+            Adw.LayoutSlot.new("detail"), "Recipe"
+        )
+        self.default_detail_page.set_tag("detail")
+        self.default_inner.set_sidebar(self.default_list_page)
+        self.default_inner.set_content(self.default_detail_page)
 
-        self.toaster = Adw.ToastOverlay(child=self.outer_paned)
+        default_sidebar_page = Adw.NavigationPage.new(
+            Adw.LayoutSlot.new("sidebar"), "Navigation"
+        )
+        default_sidebar_page.set_tag("sidebar")
+        default_inner_page = Adw.NavigationPage.new(self.default_inner, "inner")
+        default_inner_page.set_tag("inner")
+        default_inner_page.set_can_pop(False)
+        self.default_outer.set_sidebar(default_sidebar_page)
+        self.default_outer.set_content(default_inner_page)
+
+        layout_default = Adw.Layout.new(self.default_outer)
+        layout_default.set_name("default")
+
+        self.medium_outer = Adw.NavigationSplitView()
+        self.medium_outer.set_collapsed(True)
+        self.medium_outer.set_min_sidebar_width(NAV_MIN_SP)
+        self.medium_outer.set_max_sidebar_width(NAV_MAX_SP)
+        self.medium_outer.set_sidebar_width_unit(Adw.LengthUnit.SP)
+        self.medium_outer.set_sidebar_width_fraction(0.5)
+        self.medium_outer.connect("notify::collapsed", self._sync_list_chrome)
+        self.medium_outer.connect("notify::show-content", self._sync_list_chrome)
+        self.medium_outer.connect(
+            "notify::show-content", self._on_nav_collapsed_changed
+        )
+
+        self.medium_inner = Adw.NavigationSplitView()
+        self.medium_inner.set_min_sidebar_width(NAV_MIN_SP)
+        self.medium_inner.set_max_sidebar_width(NAV_MAX_SP)
+        self.medium_inner.set_sidebar_width_unit(Adw.LengthUnit.SP)
+        self.medium_inner.set_sidebar_width_fraction(0.35)
+        # Nav | list side by side on the lists page (Newsflash medium).
+        self.medium_inner.set_collapsed(False)
+        self.medium_inner.connect("notify::collapsed", self._on_nav_collapsed_changed)
+        self.medium_inner.connect("notify::show-content", self._on_nav_collapsed_changed)
+
+        medium_sidebar_page = Adw.NavigationPage.new(
+            Adw.LayoutSlot.new("sidebar"), "Navigation"
+        )
+        medium_sidebar_page.set_tag("sidebar")
+        medium_sidebar_page.set_can_pop(False)
+        self.medium_list_page = Adw.NavigationPage.new(
+            Adw.LayoutSlot.new("list"), "Recipes"
+        )
+        self.medium_list_page.set_tag("list")
+        self.medium_list_page.set_can_pop(False)
+        self.medium_inner.set_sidebar(medium_sidebar_page)
+        self.medium_inner.set_content(self.medium_list_page)
+
+        medium_lists_page = Adw.NavigationPage.new(self.medium_inner, "lists")
+        medium_lists_page.set_tag("lists")
+        self.medium_detail_page = Adw.NavigationPage.new(
+            Adw.LayoutSlot.new("detail"), "Recipe"
+        )
+        self.medium_detail_page.set_tag("detail")
+        self.medium_outer.set_sidebar(medium_lists_page)
+        self.medium_outer.set_content(self.medium_detail_page)
+
+        layout_medium = Adw.Layout.new(self.medium_outer)
+        layout_medium.set_name("medium")
+
+        self.multi_layout.add_layout(layout_default)
+        self.multi_layout.add_layout(layout_medium)
+        self.multi_layout.set_child("sidebar", self.sidebar)
+        self.multi_layout.set_child("list", list_tv)
+        self.multi_layout.set_child("detail", self.detail_host)
+        self.multi_layout.set_layout_name("default")
+
+        # Compat aliases used by width snapshot / older call sites.
+        self.outer_split = self.default_outer
+        self.inner_split = self.default_inner
+        self.list_page = self.default_list_page
+        self.detail_page = self.default_detail_page
+        self.content_stack = self.detail_host
+
+        self.shell_bin = Adw.BreakpointBin()
+        self.shell_bin.set_hexpand(True)
+        self.shell_bin.set_vexpand(True)
+        self.shell_bin.set_size_request(360, 400)
+        self.shell_bin.set_child(self.multi_layout)
+
+        self._shell_band = "wide"
+        # Once a destination is chosen, keep the overlay closed until the user
+        # opens it again via the nav toggle (avoids layout flicker re-showing it).
+        self._nav_overlay_dismissed = False
+        self._apply_split_widths_from_settings()
+
+        self.toaster = Adw.ToastOverlay(child=self.shell_bin)
 
         self.cook_view = CookView(settings)
         self.cook_view.on_exit = self._exit_cook_mode
@@ -226,6 +337,8 @@ class PinchBowlWindow(Adw.ApplicationWindow):
         self.mode_stack = Gtk.Stack()
         self.mode_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
         self.mode_stack.set_transition_duration(220)
+        self.mode_stack.set_hhomogeneous(False)
+        self.mode_stack.set_vhomogeneous(False)
         self.mode_stack.set_hexpand(True)
         self.mode_stack.set_vexpand(True)
         self.mode_stack.add_named(self.toaster, "library")
@@ -233,6 +346,7 @@ class PinchBowlWindow(Adw.ApplicationWindow):
         self.set_content(self.mode_stack)
         self.add_css_class("pb-window")
 
+        self._install_shell_breakpoints()
         self._install_actions()
         key_controller = Gtk.EventControllerKey()
         key_controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
@@ -253,9 +367,8 @@ class PinchBowlWindow(Adw.ApplicationWindow):
         )
         self._mela_watch.restart()
         GLib.idle_add(self._mela_watch_check_later)
-        # Reaffirm positions once the window has a real allocation (maximize /
-        # compositor sizing). No-op visually if they already match.
         self.connect("map", self._on_first_map)
+        self._on_nav_collapsed_changed()
 
     def _mela_watch_check_later(self) -> bool:
         if self._closed or self._mela_watch is None:
@@ -396,15 +509,51 @@ class PinchBowlWindow(Adw.ApplicationWindow):
             self._show_recipes()
             self._reload_list()
 
-    def _show_recipes(self) -> None:
-        self.content_stack.set_visible_child_name("recipes")
+    def _show_recipes(self, *, dismiss_nav: bool = True) -> None:
+        self.detail_host.set_visible_child_name("recipes")
+        self._apply_destination_shell()
+        if dismiss_nav:
+            self._close_nav_overlay()
 
-    def _show_groceries(self) -> None:
-        self.content_stack.set_visible_child_name("groceries")
+    def _show_groceries(self, *, dismiss_nav: bool = True) -> None:
+        self.detail_host.set_visible_child_name("groceries")
         self.groceries_view.reload()
+        self._apply_destination_shell()
+        if dismiss_nav:
+            self._close_nav_overlay()
 
-    def _show_ai_generate(self) -> None:
-        self.content_stack.set_visible_child_name("ai_generate")
+    def _show_ai_generate(self, *, dismiss_nav: bool = True) -> None:
+        self.detail_host.set_visible_child_name("ai_generate")
+        self._apply_destination_shell()
+        if dismiss_nav:
+            self._close_nav_overlay()
+
+    def _destination_content_only(self) -> bool:
+        return self.detail_host.get_visible_child_name() in (
+            "groceries",
+            "ai_generate",
+        )
+
+    def _apply_destination_shell(self) -> None:
+        """Groceries / AI replace list+detail: force content-forward."""
+        dest = self._destination_content_only()
+        self.default_detail_page.set_can_pop(not dest)
+        self.medium_detail_page.set_can_pop(not dest)
+        if dest:
+            self.default_inner.set_collapsed(True)
+            self.default_inner.set_show_content(True)
+            self.medium_outer.set_show_content(True)
+            self._sync_list_chrome()
+            return
+        # Leaving a destination: restore list|detail collapse for this band.
+        if self._shell_band in ("wide", "nav_overlay"):
+            self.default_inner.set_collapsed(False)
+        elif self._shell_band == "medium":
+            # Back to nav|list; row selection / _show_recipe opens detail again.
+            self.medium_outer.set_show_content(False)
+        elif self._shell_band == "narrow":
+            self.default_inner.set_collapsed(True)
+        self._sync_list_chrome()
 
     def _reload_list(self) -> None:
         """Rebuild every list row from SQLite (imports, edits, deletes).
@@ -444,7 +593,9 @@ class PinchBowlWindow(Adw.ApplicationWindow):
             "untagged": "Untagged",
             "tag": tag or "Tag",
         }
-        self.list_heading.set_text(titles.get(key, "Recipes"))
+        title = titles.get(key, "Recipes")
+        self.list_heading.set_text(title)
+        self._set_list_title(title)
 
         keep_id = self._current_id
         self._selecting = True
@@ -471,7 +622,10 @@ class PinchBowlWindow(Adw.ApplicationWindow):
             self._selecting = False
             self._current_id = None
             self.recipe_view.show_empty()
+            self._set_detail_title("Recipe")
             self._sync_selection_actions()
+            if self._recipe_nav_collapsed():
+                self._set_show_recipe_content(False)
             return
 
         # Selection alone is not enough: after import we set _current_id before
@@ -548,15 +702,29 @@ class PinchBowlWindow(Adw.ApplicationWindow):
         return row1.recipe_id - row2.recipe_id
 
     def _on_filter(self, key: str, tag: str | None) -> None:
+        # Opening the nav overlay remaps the sidebar and GTK re-emits
+        # row-selected for the current row. That must not dismiss the overlay
+        # (first-shrink bug); only a real destination change should.
+        prev = self._filter
+        child = self.detail_host.get_visible_child_name()
+        if key == "groceries":
+            same_dest = child == "groceries"
+        elif key == "ai_generate":
+            same_dest = child == "ai_generate"
+        else:
+            same_dest = child == "recipes" and prev == (key, tag)
+
         self._filter = (key, tag)
         if key == "groceries":
-            self._show_groceries()
+            self._show_groceries(dismiss_nav=not same_dest)
             return
         if key == "ai_generate":
-            self._show_ai_generate()
+            self._show_ai_generate(dismiss_nav=not same_dest)
             return
-        self._show_recipes()
+        self._show_recipes(dismiss_nav=not same_dest)
         self._apply_list_view()
+        if not same_dest:
+            self._close_nav_overlay()
 
     def _on_tags_expanded_changed(self, expanded: bool) -> None:
         self.settings.update(sidebar_tags_expanded=expanded, notify=False)
@@ -594,6 +762,10 @@ class PinchBowlWindow(Adw.ApplicationWindow):
 
     def _show_recipe(self, recipe: Recipe) -> None:
         self.recipe_view.load_recipe(recipe)
+        self._set_detail_title(recipe.title or "Recipe")
+        if self._recipe_nav_collapsed():
+            self._set_show_recipe_content(True)
+        self._close_nav_overlay()
 
     def show_preferences(self) -> None:
         dialog = PreferencesDialog(
@@ -714,24 +886,9 @@ class PinchBowlWindow(Adw.ApplicationWindow):
         if self._cook_was_maximized and not self.is_maximized():
             # Unfullscreen is async; restore maximize on the next idle.
             GLib.idle_add(self._restore_maximized_after_cook)
-        # Hero/side column sized against the cook/fullscreen allocation; refresh
-        # after the library pane is visible and window geometry has settled.
-        self._cook_layout_tries = 0
-        GLib.idle_add(self._sync_layout_after_cook)
-
     def _restore_maximized_after_cook(self) -> bool:
         if not self.is_fullscreen() and not self.is_maximized():
             self.maximize()
-        return False
-
-    def _sync_layout_after_cook(self) -> bool:
-        self._cook_layout_tries += 1
-        if self.is_fullscreen() and self._cook_layout_tries < 40:
-            return True
-        self.recipe_view.sync_layout()
-        if self._cook_layout_tries < 8:
-            # A couple of follow-up passes after unfullscreen reallocates panes.
-            GLib.timeout_add(50, self.recipe_view.sync_layout)
         return False
 
     def _on_adjust(self) -> None:
@@ -1499,12 +1656,290 @@ class PinchBowlWindow(Adw.ApplicationWindow):
         alert.present(self)
         GLib.idle_add(step)
 
+    def _make_nav_toggle(self) -> Gtk.Button:
+        btn = Gtk.Button(icon_name="sidebar-show-symbolic")
+        btn.add_css_class("flat")
+        btn.set_tooltip_text("Show navigation")
+        btn.set_visible(False)
+        btn.connect("clicked", self._on_nav_toggle_clicked)
+        self._nav_toggles.append(btn)
+        return btn
+
+    def _is_default_layout(self) -> bool:
+        name = self.multi_layout.get_layout_name() or "default"
+        return name == "default"
+
+    def _set_list_title(self, title: str) -> None:
+        self.default_list_page.set_title(title)
+        self.medium_list_page.set_title(title)
+
+    def _set_detail_title(self, title: str) -> None:
+        self.default_detail_page.set_title(title)
+        self.medium_detail_page.set_title(title)
+
+    def _recipe_nav_collapsed(self) -> bool:
+        if self._is_default_layout():
+            return self.default_inner.get_collapsed()
+        return self.medium_outer.get_collapsed()
+
+    def _set_show_recipe_content(self, show: bool) -> None:
+        self.default_inner.set_show_content(show)
+        self.medium_outer.set_show_content(show)
+
+    def _nav_toggle_needed(self) -> bool:
+        if self._is_default_layout():
+            return self.default_outer.get_collapsed()
+        # Medium: back to nav|list from detail, or reveal filters if collapsed.
+        if self.medium_outer.get_show_content():
+            return True
+        return self.medium_inner.get_collapsed()
+
+    def _on_nav_toggle_clicked(self, *_args: object) -> None:
+        if self._is_default_layout():
+            self._nav_overlay_dismissed = False
+            self.default_outer.set_show_sidebar(True)
+            return
+        # Medium: leave detail for nav|list (Newsflash mid-band).
+        self.medium_outer.set_show_content(False)
+        self.medium_inner.set_collapsed(False)
+
+    def _on_nav_collapsed_changed(self, *_args: object) -> None:
+        needed = self._nav_toggle_needed()
+        for btn in self._nav_toggles:
+            btn.set_visible(needed)
+        # Only the wide band should keep the sidebar permanently visible.
+        # Using `not get_collapsed()` re-opened the overlay after a destination
+        # pick whenever collapsed flickered during the layout update.
+        if self._shell_band == "wide" and self._is_default_layout():
+            self._nav_overlay_dismissed = False
+            self.default_outer.set_show_sidebar(True)
+        elif self._nav_overlay_dismissed and self._nav_overlay_active():
+            self.default_outer.set_show_sidebar(False)
+        self._sync_list_chrome()
+
+    def _sync_list_chrome(self, *_args: object) -> None:
+        """Show window controls on the list header when it is the only visible page."""
+        recipes = self.detail_host.get_visible_child_name() == "recipes"
+        if self._is_default_layout():
+            list_alone = (
+                recipes
+                and self.default_inner.get_collapsed()
+                and not self.default_inner.get_show_content()
+            )
+        else:
+            list_alone = (
+                recipes
+                and self.medium_outer.get_collapsed()
+                and not self.medium_outer.get_show_content()
+            )
+        self.list_header.set_show_end_title_buttons(list_alone)
+
+    def _nav_overlay_active(self) -> bool:
+        """True when nav should behave as a dismissible overlay."""
+        if not self._is_default_layout():
+            return False
+        return self._shell_band in ("nav_overlay", "narrow") or self.default_outer.get_collapsed()
+
+    def _close_nav_overlay(self) -> None:
+        if not self._nav_overlay_active():
+            # Medium keeps nav|list; nothing to dismiss after a filter pick.
+            return
+        self._nav_overlay_dismissed = True
+        self.default_outer.set_show_sidebar(False)
+        # Selection/focus inside the overlay can restore show-sidebar in the
+        # same turn or on the next frame — re-assert a few times.
+        GLib.idle_add(self._ensure_nav_overlay_closed)
+        GLib.timeout_add(50, self._ensure_nav_overlay_closed)
+
+    def _ensure_nav_overlay_closed(self) -> bool:
+        if not self._nav_overlay_dismissed or not self._is_default_layout():
+            return GLib.SOURCE_REMOVE
+        if self._shell_band in ("nav_overlay", "narrow"):
+            if not self.default_outer.get_collapsed():
+                self.default_outer.set_collapsed(True)
+            self.default_outer.set_show_sidebar(False)
+        elif self.default_outer.get_collapsed():
+            self.default_outer.set_show_sidebar(False)
+        return GLib.SOURCE_REMOVE
+
+    def _install_shell_breakpoints(self) -> None:
+        # Newsflash-style bands on the shell BreakpointBin (sp). Adw applies
+        # only the last matching breakpoint — each handler sets full state.
+        # Ingredient stacking stays on the detail BreakpointBin (~1100sp).
+        wide_collapse = Adw.Breakpoint.new(
+            Adw.BreakpointCondition.parse("max-width: 1000sp")
+        )
+        wide_collapse.connect("apply", self._on_shell_nav_overlay_apply)
+        wide_collapse.connect("unapply", self._on_shell_wide_apply)
+        self.shell_bin.add_breakpoint(wide_collapse)
+
+        medium = Adw.Breakpoint.new(
+            Adw.BreakpointCondition.parse(
+                "max-width: 800sp and min-width: 500sp"
+            )
+        )
+        medium.connect("apply", self._on_shell_medium_apply)
+        medium.connect("unapply", self._on_shell_medium_unapply)
+        self.shell_bin.add_breakpoint(medium)
+
+        narrow = Adw.Breakpoint.new(
+            Adw.BreakpointCondition.parse("max-width: 500sp")
+        )
+        narrow.connect("apply", self._on_shell_narrow_apply)
+        narrow.connect("unapply", self._on_shell_narrow_unapply)
+        self.shell_bin.add_breakpoint(narrow)
+
+    def _set_compact_destinations(self, compact: bool) -> None:
+        self.groceries_view.set_compact(compact)
+        self.ai_generate_view.set_compact(compact)
+
+    def _apply_shell_band(self, band: str) -> None:
+        """band: wide | nav_overlay | medium | narrow."""
+        # Preserve whether a recipe (or destination) is showing across topology.
+        if self._is_default_layout():
+            showing = self.default_inner.get_show_content()
+        else:
+            showing = self.medium_outer.get_show_content()
+        self._shell_band = band
+        if band == "wide":
+            self.multi_layout.set_layout_name("default")
+            self._nav_overlay_dismissed = False
+            self.default_outer.set_collapsed(False)
+            self.default_outer.set_show_sidebar(True)
+            self.default_inner.set_collapsed(False)
+            self.default_inner.set_show_content(showing)
+            self._set_compact_destinations(False)
+        elif band == "nav_overlay":
+            self.multi_layout.set_layout_name("default")
+            self.default_outer.set_collapsed(True)
+            # Collapse auto-hides; keep dismissed clear so the user can open
+            # the overlay (sidebar remap re-select must not look like a pick).
+            self.default_outer.set_show_sidebar(False)
+            self._nav_overlay_dismissed = False
+            self.default_outer.set_max_sidebar_width(
+                min(float(NAV_MAX_SP), self.default_outer.get_max_sidebar_width())
+            )
+            self.default_inner.set_collapsed(False)
+            self.default_inner.set_show_content(showing)
+            self._set_compact_destinations(True)
+        elif band == "medium":
+            self.multi_layout.set_layout_name("medium")
+            self._nav_overlay_dismissed = False
+            self.medium_outer.set_collapsed(True)
+            self.medium_outer.set_show_content(showing)
+            # Lists page: navigation beside recipe list; detail overlays.
+            self.medium_inner.set_collapsed(False)
+            self._set_compact_destinations(True)
+        else:  # narrow
+            self.multi_layout.set_layout_name("default")
+            self.default_outer.set_collapsed(True)
+            self.default_outer.set_show_sidebar(False)
+            self._nav_overlay_dismissed = False
+            self.default_outer.set_max_sidebar_width(
+                min(float(NAV_MAX_SP), self.default_outer.get_max_sidebar_width())
+            )
+            self.default_inner.set_collapsed(True)
+            self.default_inner.set_show_content(showing)
+            self._set_compact_destinations(True)
+        self._apply_destination_shell()
+        self._on_nav_collapsed_changed()
+
+    def _on_shell_wide_apply(self, *_args: object) -> None:
+        self._apply_shell_band("wide")
+
+    def _on_shell_nav_overlay_apply(self, *_args: object) -> None:
+        self._apply_shell_band("nav_overlay")
+
+    def _on_shell_medium_apply(self, *_args: object) -> None:
+        self._apply_shell_band("medium")
+
+    def _on_shell_medium_unapply(self, *_args: object) -> None:
+        # Leaving the 500–800 band: either narrow, nav_overlay, or wide.
+        # width<=0 (unmap / early lifecycle): pick nav_overlay so _shell_band
+        # does not stay stuck on medium until the next real resize.
+        width = self.shell_bin.get_width()
+        if 0 < width <= 500:
+            self._apply_shell_band("narrow")
+        elif width <= 1000:
+            self._apply_shell_band("nav_overlay")
+        else:
+            self._apply_shell_band("wide")
+
+    def _on_shell_narrow_apply(self, *_args: object) -> None:
+        self._apply_shell_band("narrow")
+
+    def _on_shell_narrow_unapply(self, *_args: object) -> None:
+        width = self.shell_bin.get_width()
+        if 500 < width <= 800:
+            self._apply_shell_band("medium")
+        elif width <= 1000:
+            self._apply_shell_band("nav_overlay")
+        else:
+            self._apply_shell_band("wide")
+
+    def _clamp_list_width(self, value: int) -> int:
+        return max(_LIST_MIN_SP, min(_LIST_MAX_SP, value))
+
+    def _clamp_nav_width(self, value: int) -> int:
+        return max(NAV_MIN_SP, min(NAV_MAX_SP, value))
+
+    def _apply_split_widths_from_settings(self) -> None:
+        nav = self._clamp_nav_width(int(self.settings.nav_width))
+        listing = self._clamp_list_width(int(self.settings.list_width))
+        win_w = max(nav + listing + 400, int(self.settings.window_width) or 1480)
+        self.default_outer.set_min_sidebar_width(NAV_MIN_SP)
+        self.default_outer.set_max_sidebar_width(float(nav))
+        self.default_outer.set_sidebar_width_fraction(nav / win_w)
+        self.medium_outer.set_min_sidebar_width(NAV_MIN_SP)
+        self.medium_outer.set_max_sidebar_width(float(nav))
+        self.medium_outer.set_sidebar_width_fraction(0.5)
+        self.medium_inner.set_min_sidebar_width(NAV_MIN_SP)
+        self.medium_inner.set_max_sidebar_width(float(nav))
+        self.medium_inner.set_sidebar_width_fraction(0.35)
+        self.default_inner.set_min_sidebar_width(_LIST_MIN_SP)
+        self.default_inner.set_max_sidebar_width(float(listing))
+        # Newsflash uses ~0.40 of the content area for the article list.
+        self.default_inner.set_sidebar_width_fraction(0.40)
+
+    def _snapshot_split_widths(self) -> tuple[int, int]:
+        win_w = max(1, self.get_width())
+        nav = int(round(self.default_outer.get_max_sidebar_width()))
+        if (
+            self._is_default_layout()
+            and not self.default_outer.get_collapsed()
+            and self.sidebar.get_mapped()
+        ):
+            allocated = self.sidebar.get_width()
+            if allocated >= NAV_MIN_SP:
+                nav = allocated
+        listing = int(round(self.default_inner.get_max_sidebar_width()))
+        list_widget = self.multi_layout.get_child("list")
+        if (
+            self._is_default_layout()
+            and not self.default_inner.get_collapsed()
+            and list_widget is not None
+            and list_widget.get_mapped()
+        ):
+            allocated_list = list_widget.get_width()
+            if allocated_list >= _LIST_MIN_SP:
+                listing = allocated_list
+        nav = self._clamp_nav_width(nav)
+        listing = self._clamp_list_width(listing)
+        self.default_outer.set_min_sidebar_width(NAV_MIN_SP)
+        self.default_outer.set_max_sidebar_width(float(nav))
+        self.default_outer.set_sidebar_width_fraction(nav / max(win_w, nav + 400))
+        self.medium_outer.set_min_sidebar_width(NAV_MIN_SP)
+        self.medium_outer.set_max_sidebar_width(float(nav))
+        self.medium_inner.set_min_sidebar_width(NAV_MIN_SP)
+        self.medium_inner.set_max_sidebar_width(float(nav))
+        self.default_inner.set_min_sidebar_width(_LIST_MIN_SP)
+        self.default_inner.set_max_sidebar_width(float(listing))
+        self.default_inner.set_sidebar_width_fraction(0.40)
+        return nav, listing
+
     def apply_layout_from_settings(self) -> None:
-        self.outer_paned.set_position(self.settings.nav_width)
-        self.list_paned.set_position(self.settings.list_width)
+        self._apply_split_widths_from_settings()
         self.recipe_view.apply_appearance()
-        # Side column fraction depends on the detail pane's allocated width.
-        GLib.idle_add(self.recipe_view.sync_layout)
 
     def _on_first_map(self, *_args: object) -> None:
         if self._ready:
@@ -1521,49 +1956,35 @@ class PinchBowlWindow(Adw.ApplicationWindow):
         self._show_welcome()
         return False
 
-    def _on_pane_moved(self, *_args: object) -> None:
+    def _schedule_width_save(self) -> None:
         if not self._ready:
             return
-        self._schedule_layout_sync()
-        if self._pane_save is not None:
-            GLib.source_remove(self._pane_save)
-        self._pane_save = GLib.timeout_add(200, self._save_panes)
+        if self._width_save is not None:
+            GLib.source_remove(self._width_save)
+        self._width_save = GLib.timeout_add(250, self._save_widths)
 
-    def _save_panes(self) -> bool:
-        self._pane_save = None
+    def _save_widths(self) -> bool:
+        self._width_save = None
+        if self._cook_active or self.is_fullscreen():
+            return False
+        nav, listing = self._snapshot_split_widths()
         self.settings.update(
             notify=False,
-            nav_width=self.outer_paned.get_position(),
-            list_width=self.list_paned.get_position(),
+            nav_width=nav,
+            list_width=listing,
+            window_width=self.get_width(),
+            window_height=self.get_height(),
+            window_maximized=self.is_maximized(),
         )
-        return False
-
-    def _schedule_layout_sync(self) -> None:
-        """Debounce side-column reflow while the window or panes are resizing."""
-        if not self._ready:
-            return
-        if self._layout_sync is not None:
-            GLib.source_remove(self._layout_sync)
-        self._layout_sync = GLib.timeout_add(50, self._run_layout_sync)
-
-    def _run_layout_sync(self) -> bool:
-        self._layout_sync = None
-        self.recipe_view.sync_layout()
         return False
 
     def _on_window_size(self, *_args: object) -> None:
         if not self._ready:
             return
-        self._schedule_layout_sync()
         # Don't persist fullscreen cook geometry as the normal window size.
         if self._cook_active or self.is_fullscreen():
             return
-        self.settings.update(
-            notify=False,
-            window_width=self.get_width(),
-            window_height=self.get_height(),
-            window_maximized=self.is_maximized(),
-        )
+        self._schedule_width_save()
 
     def _on_close(self, *_args: object) -> bool:
         self._closed = True
@@ -1571,10 +1992,11 @@ class PinchBowlWindow(Adw.ApplicationWindow):
             self._mela_watch.stop()
         if self._cook_active:
             self.cook_view.clear_timers()
+        nav, listing = self._snapshot_split_widths()
         kwargs: dict = {
             "notify": False,
-            "nav_width": self.outer_paned.get_position(),
-            "list_width": self.list_paned.get_position(),
+            "nav_width": nav,
+            "list_width": listing,
         }
         if self._cook_active or self.is_fullscreen():
             kwargs["window_maximized"] = self._cook_was_maximized if self._cook_active else self.is_maximized()

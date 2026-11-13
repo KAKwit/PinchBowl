@@ -24,7 +24,11 @@ def _meta_part(icon_name: str, text: str) -> Gtk.Widget:
     label = Gtk.Label(label=text, xalign=0)
     label.add_css_class("caption")
     label.set_ellipsize(Pango.EllipsizeMode.END)
+    label.set_width_chars(1)
+    label.set_hexpand(True)
     label.set_valign(Gtk.Align.CENTER)
+    box.set_overflow(Gtk.Overflow.HIDDEN)
+    box.set_hexpand(True)
     box.append(icon)
     box.append(label)
     return box
@@ -49,6 +53,8 @@ class RecipeRow(Gtk.ListBoxRow):
         root.set_margin_end(12)
         root.set_margin_top(10)
         root.set_margin_bottom(10)
+        root.set_overflow(Gtk.Overflow.HIDDEN)
+        root.set_hexpand(True)
 
         self.thumb = Gtk.Picture()
         self.thumb.set_size_request(56, 56)
@@ -77,14 +83,19 @@ class RecipeRow(Gtk.ListBoxRow):
 
         col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         col.set_hexpand(True)
+        col.set_overflow(Gtk.Overflow.HIDDEN)
 
         title = Gtk.Label(label=recipe.title, xalign=0)
         title.add_css_class("heading")
         title.set_ellipsize(Pango.EllipsizeMode.END)
         title.set_wrap(False)
+        title.set_width_chars(1)
+        title.set_hexpand(True)
 
         meta = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         meta.add_css_class("pb-row-meta")
+        meta.set_overflow(Gtk.Overflow.HIDDEN)
+        meta.set_hexpand(True)
 
         if recipe.time_label:
             meta.append(_meta_part("alarm-symbolic", recipe.time_label))

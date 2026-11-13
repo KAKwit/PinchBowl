@@ -50,6 +50,10 @@ def install_benign_gdk_filters() -> None:
                 message = _field_text(field)
         if domain == "Gdk" and "VK_SUBOPTIMAL_KHR" in message:
             return GLib.LogWriterOutput.HANDLED
+        # OverlaySplitView / MultiLayoutView animate through widths slightly
+        # below a child's reported minimum (often 1px). Layout still succeeds.
+        if domain == "Gtk" and "Trying to measure" in message and "needs at least" in message:
+            return GLib.LogWriterOutput.HANDLED
         return GLib.log_writer_default(log_level, fields, _user_data)
 
     _KEEPALIVE.append(writer)

@@ -33,7 +33,10 @@ from pinchbowl.timers import (
 
 # Step column max width; Clamp centers it beside the ingredients column.
 _STEP_CLAMP = 840
-_ING_WIDTH = 440
+_ING_MAX = 400
+_ING_TIGHTEN = 320
+# Collapse ingredients to an overlay below this width.
+_COOK_NARROW_SP = 720
 # Type ramp above the recipe preference.
 _SIZE_BUMP = 7
 _SCROLL_ANIM_MS = 220
@@ -140,11 +143,6 @@ class CookView(Gtk.Box):
         self.meta.set_margin_bottom(4)
         self.append(self.meta)
 
-        body = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        body.set_hexpand(True)
-        body.set_vexpand(True)
-        body.add_css_class("pb-cook-body")
-
         # Directions column — Clamp centers the measure in the space beside
         # ingredients (wide max, balanced side margins).
         self.steps_scroll = Gtk.ScrolledWindow()
@@ -174,11 +172,10 @@ class CookView(Gtk.Box):
         scroll_ctl.connect("scroll", self._on_steps_scroll)
         self.steps_scroll.add_controller(scroll_ctl)
 
-        # Ingredients column
+        # Ingredients column (sidebar of OverlaySplitView; overlays when narrow)
         ing_outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         ing_outer.add_css_class("pb-cook-ing-col")
-        ing_outer.set_size_request(_ING_WIDTH, -1)
-        ing_outer.set_hexpand(False)
+        ing_outer.set_hexpand(True)
         ing_outer.set_vexpand(True)
 
         ing_heading = Gtk.Label(label="Ingredients", xalign=0)
@@ -202,15 +199,75 @@ class CookView(Gtk.Box):
         self.ing_scroll.set_child(self.ingredients_box)
         ing_outer.append(self.ing_scroll)
 
-        body.append(self.steps_scroll)
-        body.append(ing_outer)
-        self.append(body)
+        ing_clamp = Adw.Clamp()
+        ing_clamp.set_maximum_size(_ING_MAX)
+        ing_clamp.set_tightening_threshold(_ING_TIGHTEN)
+        ing_clamp.set_child(ing_outer)
+        ing_clamp.set_hexpand(True)
+
+        self.body_split = Adw.OverlaySplitView()
+        self.body_split.set_sidebar_position(Gtk.PackType.END)
+        self.body_split.set_min_sidebar_width(240)
+        self.body_split.set_max_sidebar_width(float(_ING_MAX))
+        self.body_split.set_sidebar_width_fraction(0.38)
+        self.body_split.set_sidebar_width_unit(Adw.LengthUnit.SP)
+        self.body_split.set_content(self.steps_scroll)
+        self.body_split.set_sidebar(ing_clamp)
+        self.body_split.set_hexpand(True)
+        self.body_split.set_vexpand(True)
+        self.body_split.add_css_class("pb-cook-body")
+        self.body_split.connect("notify::collapsed", self._on_cook_split_collapsed)
+
+        self.ing_toggle = Gtk.ToggleButton()
+        self.ing_toggle.add_css_class("flat")
+        self.ing_toggle.add_css_class("circular")
+        self.ing_toggle.set_valign(Gtk.Align.CENTER)
+        self.ing_toggle.set_icon_name("view-list-bullet-symbolic")
+        self.ing_toggle.set_tooltip_text("Ingredients")
+        self.ing_toggle.set_visible(False)
+        self.ing_toggle.connect("toggled", self._on_ing_toggle)
+        # Insert before Done (last child of top).
+        top.insert_child_after(self.ing_toggle, self.timer_btn)
+
+        cook_bin = Adw.BreakpointBin()
+        cook_bin.set_size_request(320, 320)
+        cook_bin.set_hexpand(True)
+        cook_bin.set_vexpand(True)
+        cook_bin.set_child(self.body_split)
+        cook_bp = Adw.Breakpoint.new(
+            Adw.BreakpointCondition.parse(f"max-width: {_COOK_NARROW_SP}sp")
+        )
+        cook_bp.connect(
+            "apply", lambda *_: self.body_split.set_collapsed(True)
+        )
+        cook_bp.connect(
+            "unapply", lambda *_: self.body_split.set_collapsed(False)
+        )
+        cook_bin.add_breakpoint(cook_bp)
+        self.append(cook_bin)
 
         keys = Gtk.EventControllerKey()
         keys.connect("key-pressed", self.on_key_pressed)
         self.add_controller(keys)
 
         self.apply_appearance()
+        self._on_cook_split_collapsed()
+
+    def _on_cook_split_collapsed(self, *_args: object) -> None:
+        collapsed = self.body_split.get_collapsed()
+        self.ing_toggle.set_visible(collapsed)
+        if not collapsed:
+            self.body_split.set_show_sidebar(True)
+            self.ing_toggle.set_active(False)
+        else:
+            showing = self.body_split.get_show_sidebar()
+            if self.ing_toggle.get_active() != showing:
+                self.ing_toggle.set_active(showing)
+
+    def _on_ing_toggle(self, btn: Gtk.ToggleButton) -> None:
+        if not self.body_split.get_collapsed():
+            return
+        self.body_split.set_show_sidebar(btn.get_active())
 
     def request_exit(self) -> None:
         n = self._timers.count

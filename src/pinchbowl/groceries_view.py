@@ -29,19 +29,13 @@ class GroceriesView(Gtk.Box):
         self.on_clear_done: Callable[[], None] | None = None
         self.on_clear_all: Callable[[], None] | None = None
         self._empty_page: Adw.StatusPage | None = None
+        self._compact = False
         self.add_css_class("pb-groceries-view")
         self.set_hexpand(True)
         self.set_vexpand(True)
 
-        chrome = Gtk.WindowHandle()
-        chrome.add_css_class("window-chrome")
-        bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        bar.add_css_class("pb-groceries-toolbar")
-
         self.heading = Gtk.Label(label="Groceries", xalign=0)
         self.heading.add_css_class("heading")
-        self.heading.set_hexpand(True)
-        bar.append(self.heading)
 
         self.sort_btn = Gtk.MenuButton()
         self.sort_btn.add_css_class("flat")
@@ -57,30 +51,31 @@ class GroceriesView(Gtk.Box):
         dir_section.append("Descending", "grocery.sort-dir::desc")
         sort_menu.append_section(None, dir_section)
         self.sort_btn.set_menu_model(sort_menu)
-        bar.append(self.sort_btn)
 
-        self.clear_done_btn = Gtk.Button(label="Clear done")
+        # Icon-only clear actions keep the header under narrow window mins.
+        self.clear_done_btn = Gtk.Button(icon_name="edit-clear-all-symbolic")
         self.clear_done_btn.add_css_class("flat")
-        self.clear_done_btn.set_tooltip_text("Remove checked items")
+        self.clear_done_btn.set_tooltip_text("Clear done")
         self.clear_done_btn.connect(
             "clicked", lambda *_: self.on_clear_done and self.on_clear_done()
         )
-        bar.append(self.clear_done_btn)
 
-        self.clear_all_btn = Gtk.Button(label="Clear all")
+        self.clear_all_btn = Gtk.Button(icon_name="user-trash-symbolic")
         self.clear_all_btn.add_css_class("flat")
-        self.clear_all_btn.set_tooltip_text("Remove every item")
+        self.clear_all_btn.set_tooltip_text("Clear all")
         self.clear_all_btn.connect(
             "clicked", lambda *_: self.on_clear_all and self.on_clear_all()
         )
-        bar.append(self.clear_all_btn)
 
         self.menu_btn = Gtk.MenuButton(icon_name="open-menu-symbolic")
         self.menu_btn.add_css_class("flat")
-        bar.append(self.menu_btn)
-        bar.append(Gtk.WindowControls(side=Gtk.PackType.END))
-        chrome.set_child(bar)
-        self.append(chrome)
+
+        self._header = Adw.HeaderBar()
+        self._header.set_title_widget(self.heading)
+        self._header.pack_end(self.menu_btn)
+        self._header.pack_end(self.clear_all_btn)
+        self._header.pack_end(self.clear_done_btn)
+        self._header.pack_end(self.sort_btn)
 
         self._install_sort_actions()
 
@@ -93,29 +88,27 @@ class GroceriesView(Gtk.Box):
         add_list.add_css_class("boxed-list")
         add_list.append(self.add_entry)
 
-        add_clamp = Adw.Clamp()
-        add_clamp.set_maximum_size(560)
-        add_clamp.set_tightening_threshold(400)
-        add_clamp.set_child(add_list)
-        add_clamp.set_margin_start(24)
-        add_clamp.set_margin_end(24)
-        add_clamp.set_margin_top(12)
-        add_clamp.set_margin_bottom(8)
-        self.append(add_clamp)
+        self._add_clamp = Adw.Clamp()
+        self._add_clamp.set_maximum_size(560)
+        self._add_clamp.set_tightening_threshold(400)
+        self._add_clamp.set_child(add_list)
+        self._add_clamp.set_margin_start(24)
+        self._add_clamp.set_margin_end(24)
+        self._add_clamp.set_margin_top(12)
+        self._add_clamp.set_margin_bottom(8)
 
         self.search = Gtk.SearchEntry()
         self.search.set_placeholder_text("Search groceries")
         self.search.set_hexpand(True)
         self.search.connect("search-changed", self._on_search_changed)
 
-        search_clamp = Adw.Clamp()
-        search_clamp.set_maximum_size(560)
-        search_clamp.set_tightening_threshold(400)
-        search_clamp.set_child(self.search)
-        search_clamp.set_margin_start(24)
-        search_clamp.set_margin_end(24)
-        search_clamp.set_margin_bottom(8)
-        self.append(search_clamp)
+        self._search_clamp = Adw.Clamp()
+        self._search_clamp.set_maximum_size(560)
+        self._search_clamp.set_tightening_threshold(400)
+        self._search_clamp.set_child(self.search)
+        self._search_clamp.set_margin_start(24)
+        self._search_clamp.set_margin_end(24)
+        self._search_clamp.set_margin_bottom(8)
 
         empty = Adw.StatusPage(
             icon_name="view-list-bullet-symbolic",
@@ -129,26 +122,49 @@ class GroceriesView(Gtk.Box):
         self.list.add_css_class("boxed-list")
         self.list.add_css_class("pb-groceries-list")
 
-        list_clamp = Adw.Clamp()
-        list_clamp.set_maximum_size(560)
-        list_clamp.set_tightening_threshold(400)
-        list_clamp.set_child(self.list)
-        list_clamp.set_margin_start(24)
-        list_clamp.set_margin_end(24)
-        list_clamp.set_margin_top(4)
-        list_clamp.set_margin_bottom(28)
+        self._list_clamp = Adw.Clamp()
+        self._list_clamp.set_maximum_size(560)
+        self._list_clamp.set_tightening_threshold(400)
+        self._list_clamp.set_child(self.list)
+        self._list_clamp.set_margin_start(24)
+        self._list_clamp.set_margin_end(24)
+        self._list_clamp.set_margin_top(4)
+        self._list_clamp.set_margin_bottom(28)
 
         list_scroll = Gtk.ScrolledWindow()
         list_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         list_scroll.set_vexpand(True)
-        list_scroll.set_child(list_clamp)
+        list_scroll.set_child(self._list_clamp)
 
         self.stack = Gtk.Stack()
         self.stack.set_vexpand(True)
         self.stack.set_hexpand(True)
         self.stack.add_named(empty, "empty")
         self.stack.add_named(list_scroll, "list")
-        self.append(self.stack)
+
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        content.append(self._add_clamp)
+        content.append(self._search_clamp)
+        content.append(self.stack)
+
+        toolbar = Adw.ToolbarView()
+        toolbar.add_top_bar(self._header)
+        toolbar.set_content(content)
+        self.append(toolbar)
+
+    def pack_nav_toggle(self, button: Gtk.Button) -> None:
+        self._header.pack_start(button)
+
+    def set_compact(self, compact: bool) -> None:
+        if compact == self._compact:
+            return
+        self._compact = compact
+        margin = 12 if compact else 24
+        bottom = 16 if compact else 28
+        for clamp in (self._add_clamp, self._search_clamp, self._list_clamp):
+            clamp.set_margin_start(margin)
+            clamp.set_margin_end(margin)
+        self._list_clamp.set_margin_bottom(bottom)
 
     def set_menu_model(self, model: Gio.MenuModel) -> None:
         self.menu_btn.set_menu_model(model)

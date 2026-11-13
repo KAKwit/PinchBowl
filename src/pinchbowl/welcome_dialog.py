@@ -67,12 +67,14 @@ SLIDES: tuple[tuple[str, str, str], ...] = (
 class WelcomeDialog(Adw.Dialog):
     """First-run / replayable intro carousel."""
 
-    _CONTENT_WIDTH = 480
+    _CONTENT_WIDTH = 360
     _CONTENT_HEIGHT = 520
 
     def __init__(self, *, on_closed: Callable[[], None] | None = None) -> None:
         super().__init__()
         self.set_title("Welcome")
+        # Stay within the adaptive window floor (360px) so AdwDialog does not
+        # warn when the library window is already narrow.
         self.set_content_width(self._CONTENT_WIDTH)
         self.set_content_height(self._CONTENT_HEIGHT)
         self._on_closed = on_closed
@@ -160,7 +162,7 @@ class WelcomeDialog(Adw.Dialog):
         body_label.set_wrap(True)
         body_label.set_justify(Gtk.Justification.CENTER)
         body_label.set_halign(Gtk.Align.CENTER)
-        body_label.set_max_width_chars(40)
+        body_label.set_max_width_chars(32)
         body_label.set_selectable(False)
 
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
