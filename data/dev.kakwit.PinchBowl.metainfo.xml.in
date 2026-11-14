@@ -54,6 +54,14 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.0.55" date="2026-11-14">
+      <description>
+        <p>
+          GitHub Releases also attach a Meson-staged /usr tarball and an
+          Architecture: all .deb alongside the Flatpak bundle.
+        </p>
+      </description>
+    </release>
     <release version="1.0.54" date="2026-11-13">
       <description>
         <p>

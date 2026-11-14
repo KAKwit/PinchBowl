@@ -85,7 +85,9 @@ From the recipe detail **Groceries** chip: pick which ingredients to add (quanti
 
 Sidebar **AI Generate**: describe an optional idea, **Copy prompt** (asks the AI for a readable recipe plus a Schema.org Recipe JSON block), optionally **Open browser**, then paste the JSON and **Add to library**. Works with ChatGPT, Gemini, Claude, local models, etc. — any tool you already use. Source shows as **AI generated** (opens the stored prompt, not a URL).
 
-## Flatpak
+## Install
+
+### Flatpak (recommended)
 
 The manifest is [`flatpak/dev.kakwit.PinchBowl.yml`](flatpak/dev.kakwit.PinchBowl.yml). It uses the GNOME 51 runtime and bundles GSound for cook-timer audio. CI workflow: [`.github/workflows/flatpak.yml`](.github/workflows/flatpak.yml).
 
@@ -94,10 +96,31 @@ flatpak-builder --user --install --force-clean build-dir flatpak/dev.kakwit.Pinc
 flatpak run dev.kakwit.PinchBowl
 ```
 
-A push to `master` or `main` (and pull requests) builds the Flatpak on GitHub Actions and keeps `dev.kakwit.PinchBowl-x86_64.flatpak` as an artifact. Publishing a downloadable release is optional: push a tag named `v` plus the version (for example `v1.0.22`), or run the Flatpak workflow manually with **Create a GitHub Release…** enabled. That attaches the bundle to the GitHub Release. Install a downloaded bundle with:
+A push to `master` or `main` (and pull requests) builds the Flatpak on GitHub Actions and keeps `dev.kakwit.PinchBowl-x86_64.flatpak` as an artifact. Publishing a downloadable release is optional: push a tag named `v` plus the version (for example `v1.0.22`), or run the Flatpak workflow manually with **Create a GitHub Release…** enabled. That attaches the Flatpak, a `/usr`-layout tarball, and a `.deb` to the GitHub Release. Install a downloaded Flatpak bundle with:
 
 ```bash
 flatpak install --user dev.kakwit.PinchBowl-x86_64.flatpak
 ```
 
 Flathub (or another remote with the GNOME 51 runtime) must be configured on that computer; the bundle contains the app and Flatpak fetches the runtime.
+
+### Debian / Ubuntu (`.deb`)
+
+Download `pinchbowl_*_all.deb` from the [GitHub Releases](https://github.com/KAKwit/PinchBowl/releases) page, then:
+
+```bash
+sudo apt install ./pinchbowl_*_all.deb
+```
+
+Runtime dependencies (`python3`, `python3-gi`, GTK 4, libadwaita, and GSound typelibs) are declared in the package and pulled in by `apt`.
+
+### Tarball
+
+Download `pinchbowl-*.tar.gz` from the same release. It is a Meson-staged tree with `usr/` at the top (binary, Python package, desktop file, icons, and app data). Install system-wide with:
+
+```bash
+sudo tar -xvf pinchbowl-*.tar.gz -C /
+pinch-bowl
+```
+
+You need the same runtime stack as the `.deb` Depends list: `python3`, `python3-gi`, `gir1.2-gtk-4.0`, `gir1.2-adw-1`, and `gir1.2-gsound-1.0`. After install, update the icon cache if the app icon does not appear yet (`sudo gtk-update-icon-cache -f -t /usr/share/icons/hicolor`).

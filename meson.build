@@ -1,6 +1,6 @@
 project(
   'pinch-bowl',
-  version: '1.0.54',
+  version: '1.0.55',
   meson_version: '>= 1.2.0',
   default_options: ['warning_level=2'],
 )
@@ -31,7 +31,11 @@ configure_file(
   install_mode: 'rwxr-xr-x',
 )
 
-install_subdir('src/pinchbowl', install_dir: pkgdatadir)
+install_subdir(
+  'src/pinchbowl',
+  install_dir: pkgdatadir,
+  exclude_directories: ['__pycache__'],
+)
 install_data('data/style.css', install_dir: pkgdatadir / 'data')
 install_data(
   'data/sounds/alarm-clock-beep.wav',

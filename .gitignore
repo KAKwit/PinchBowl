@@ -5,6 +5,9 @@ __pycache__/
 venv/
 build/
 build-dir/
+build-release/
+stage/
+debroot/
 .flatpak-builder/
 *.db
 .cache/
